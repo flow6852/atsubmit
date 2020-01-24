@@ -9,17 +9,18 @@ import qualified Network.Socket.ByteString as NSBS
 import Control.Monad
 import System.Directory
 import qualified Control.Exception as E
+import qualified Data.Vector as V
 
 -- server part
-runServer :: UserData -> FilePath -> (Socket -> UserData -> IO (Bool, UserData)) -> IO() -- [TODO] refactoring?
-runServer user path server = withSocketsDo $ do E.bracket (open path) close (loop user)
+runServer :: UserData -> FilePath -> (Socket -> UserData -> V.Vector ContestData -> IO (Bool, UserData)) -> IO() -- [TODO] refactoring?
+runServer user path server = withSocketsDo $ do E.bracket (open path) close (loop user V.empty)
  where
-  loop :: UserData -> Socket -> IO()
-  loop user s = do
+  loop :: UserData -> V.Vector ContestData -> Socket -> IO()
+  loop user contest s = do
    (conn, peer) <- accept s
-   (endCheck, next) <- server conn user
+   (endCheck, next) <- server conn user contest
    close conn
-   if endCheck then return () else loop next s
+   if endCheck then return () else loop next contest s
   open :: FilePath -> IO Socket
   open path = do
    sock <- socket AF_UNIX Stream 0 -- AF_UNIX is UDS? [TODO] study...

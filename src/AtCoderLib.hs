@@ -20,18 +20,31 @@ import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BSC
 import Control.Monad
 import Data.Text.Encoding
+import qualified Data.Vector as V
+import qualified Text.XML.Cursor as TXC
+import qualified Text.HTML.DOM as THD
+import Control.Applicative
 
-server :: Socket -> UserData -> IO (Bool, UserData)
-server sock user = do
- msg <- NSBS.recv sock 1024 
- if (BS.null msg) then return (True, user) else do
-  case (T.unpack.decodeUtf8) msg of
-   "stop"   -> return (True, user)
-   "get"    -> atGetPage user
-   "show"   -> atShowPage user
-   "submit" -> atSubmit user
-   "test"   -> atTest user
-   _        -> return (False, user)
+type AtFunc = UserData -> V.Vector ContestData -> V.Vector T.Text -> IO (T.Text, UserData)
+
+server :: Socket -> UserData -> V.Vector ContestData -> IO (Bool, UserData)
+server sock user contests = do
+ msg <- decodeUtf8 <$> NSBS.recv sock 1024 
+ if T.null msg then return (True, user) else do
+  let (func, retb) =  case (T.unpack.Prelude.head.T.words) msg of
+                           "stop"   -> (notDo, True)
+                           "get"    -> (atGetPage, False)
+                           "show"   -> (atShowPage, False)
+                           "submit" -> (atSubmit, False)
+                           "test"   -> (atTest, False)
+                           "login"  -> (atLogin, False)
+                           _        -> (notDo, False)
+  (resStr, retu)<- func user contests ((V.fromList.Prelude.tail.T.words) msg)
+  NSBS.send sock $ encodeUtf8 msg 
+  return (retb, retu)
+   where
+    notDo :: AtFunc
+    notDo u c m = return (T.empty, u)
 
 client :: [T.Text] -> Socket -> IO()
 client msg sock = do
@@ -59,28 +72,46 @@ getCookieAndCsrfToken userdata = do
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
 
-atLogin :: UserData -> IO (Bool,UserData)
-atLogin user = do 
+getPageInfo :: V.Vector T.Text -> UserData -> IO (ContestData)
+getPageInfo msg user = do -- msg = [contestname]
+ let cname = T.takeWhile (/='_') $ V.head msg
+     questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cname $ T.append (T.pack "/tasks") $ V.head msg
+ r <- parseRequest $ T.unpack questurl
+ let req = setRequestHeader hCookie (cookie user) r
+ mng <- newManager tlsManagerSettings
+ resBody <- parseLBS.getRequestBody <$> Network.HTTP.Conduit.httpLbs req mng
+ let questext = fromDocument resBody
+ return nullContestData
+  where 
+   getQuestionText :: Cursor -> T.Text
+   getQuestionText cursor = do
+    
+ 
+atLogin :: AtFunc
+atLogin user contests msg = do 
  next <- getCookieAndCsrfToken user
  print next
- return (False, next)
+ return (T.pack "login", next)
 
-atGetPage :: UserData -> IO (Bool,UserData)
-atGetPage user = do
+atGetPage :: AtFunc 
+atGetPage user contests msg = do
+ getPageInfo msg user
  putStrLn "atGetPage"
- return (False, user)
+ return (T.pack "get page", user)
 
-atShowPage :: UserData -> IO (Bool,UserData)
-atShowPage user = do
+atShowPage :: AtFunc
+atShowPage user contests msg = do
  putStrLn "atShowPage"
- return (False, user)
+ let showPage = T.pack "show"
+ return (showPage, user)
 
-atSubmit :: UserData -> IO (Bool,UserData)
-atSubmit user = do
+atSubmit :: AtFunc
+atSubmit user contests msg = do
  putStrLn "atSubmit"
- return (False, user)
+ return (T.pack "submit", user)
 
-atTest :: UserData -> IO (Bool,UserData)
-atTest user = do
+atTest :: AtFunc
+atTest user contests msg = do
+ let result = T.pack "test"
  putStrLn "atTest"
- return (False, user)
+ return (result, user)

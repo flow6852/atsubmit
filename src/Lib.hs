@@ -3,14 +3,24 @@ module Lib where
 import qualified Data.Text as T
 import System.IO
 import qualified Data.ByteString.Char8 as BSC
+import Data.Vector
+
+data ContestData = ContestData { qid :: Int -- question number ex. abc123-a
+                               , qtext :: T.Text -- question text
+                               , qconst :: T.Text -- qeustion constraint
+                               , qinput :: T.Text -- question input
+                               , qoutput :: T.Text -- question output
+                               , qurl  :: T.Text -- question page's url
+                               , qdir :: FilePath -- sample dir
+                               } deriving (Show)
 
 data UserData = UserData { username :: T.Text
                          , password :: T.Text
                          , csrf_token :: T.Text
                          , cookie :: [BSC.ByteString]} deriving (Show)
 
-
 nullUserData = UserData { username = T.empty, password = T.empty, csrf_token = T.empty, cookie = []}
+nullContestData = ContestData { qid = -1, qtext = T.empty, qurl = T.empty}
 
 chromiumSession = "~/.config/chromium/Default/Current Session"
 
