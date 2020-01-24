@@ -1,10 +1,16 @@
 # atsubmit
 
 ```bash
-atsubmit login # login and get cookie
-atsubmit get # getting latest page
-atsubmit submit # submit for latest page
-atsubmit show # show latest page (?)
-atsubmit test # run test case using docker
+atsubmit login # relogin and get cookie
+atsubmit get [contest name] # getting latest page
+atsubmit submit [contest name] # submit for latest page
+atsubmit show [contest name] # show latest page (?)
+atsubmit test [contest name] # run test case using docker
+atsubmit result [contest name] # show result
+atsubmit stop # stop server
 ```
 
+# TODO
+
+ - create result
+ - use docker engine api and create test

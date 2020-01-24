@@ -3,29 +3,26 @@ module Lib where
 import qualified Data.Text as T
 import System.IO
 import qualified Data.ByteString.Char8 as BSC
-import Data.Vector
+import qualified Data.Vector as V
 
-data ContestData = ContestData { qid :: Int -- question number ex. abc123-a
-                               , qtext :: T.Text -- question text
-                               , qconst :: T.Text -- qeustion constraint
-                               , qinput :: T.Text -- question input
-                               , qoutput :: T.Text -- question output
-                               , qurl  :: T.Text -- question page's url
-                               , qdir :: FilePath -- sample dir
-                               } deriving (Show)
+data Question = Question { qurl :: T.Text -- question page's url
+                         , qio :: V.Vector (T.Text, T.Text) -- input, output
+                         } deriving (Show)
 
-data UserData = UserData { username :: T.Text
-                         , password :: T.Text
-                         , csrf_token :: T.Text
-                         , cookie :: [BSC.ByteString]} deriving (Show)
+data Contest = Contest { questions :: V.Vector Question 
+                       , cookie :: [BSC.ByteString]
+                       , csrf_token :: T.Text} deriving (Show)
 
-nullUserData = UserData { username = T.empty, password = T.empty, csrf_token = T.empty, cookie = []}
-nullContestData = ContestData { qid = -1, qtext = T.empty, qurl = T.empty}
+nullContest = Contest { questions = V.empty, cookie = [], csrf_token = T.empty}
+nullQuestion = Question { qurl = T.empty, qio = V.empty}
 
 chromiumSession = "~/.config/chromium/Default/Current Session"
 
-createUserData :: String -> String -> UserData
-createUserData un ps = UserData { username = T.pack un, password = T.pack ps, csrf_token = T.empty, cookie = []}
+createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
+createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
+
+createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
+createQuestion url io = Question { qurl = url, qio = io }
 
 getAPIkeys :: [String] -> IO [String]
 getAPIkeys [] = return []

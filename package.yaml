@@ -26,6 +26,8 @@ library:
   source-dirs: src
   dependencies:
           - http-conduit
+          - html-conduit
+          - xml-conduit
           - http-types
           - text
           - bytestring
