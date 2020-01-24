@@ -14,6 +14,6 @@ sockpath = "socketest.sock"
 main :: IO ()
 main = do
  arg <- Prelude.map T.pack <$> getArgs
- if null arg then getAtKeys >>= \[un, pw] -> runServer (createUserData un pw) sockpath server 
+ if null arg then getAtKeys >>= \[un, pw] -> atLogin (createUserData un pw) >>= \(b,u) -> runServer u sockpath server 
  else sendServer sockpath $ client arg
 

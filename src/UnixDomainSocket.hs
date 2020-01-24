@@ -11,15 +11,15 @@ import System.Directory
 import qualified Control.Exception as E
 
 -- server part
-runServer :: UserData -> FilePath -> (Socket -> UserData -> IO Bool) -> IO() -- [TODO] refactoring?
+runServer :: UserData -> FilePath -> (Socket -> UserData -> IO (Bool, UserData)) -> IO() -- [TODO] refactoring?
 runServer user path server = withSocketsDo $ do E.bracket (open path) close (loop user)
  where
   loop :: UserData -> Socket -> IO()
   loop user s = do
    (conn, peer) <- accept s
-   endCheck <- server conn user
+   (endCheck, next) <- server conn user
    close conn
-   if endCheck then return () else loop user s
+   if endCheck then return () else loop next s
   open :: FilePath -> IO Socket
   open path = do
    sock <- socket AF_UNIX Stream 0 -- AF_UNIX is UDS? [TODO] study...
