@@ -12,8 +12,8 @@ import qualified Control.Exception as E
 import qualified Data.Vector as V
 
 -- server part
-runServer :: Contest -> FilePath -> (Socket -> Contest -> IO (Bool, Contest)) -> IO() -- [TODO] refactoring?
-runServer contest path server = withSocketsDo $ do E.bracket (open path) close (loop contest)
+runServer :: Contest -> FilePath -> (Socket -> Contest -> IO (Bool, Contest)) -> IO()
+runServer contest path server = withSocketsDo $ E.bracket (open path) close (loop contest)
  where
   loop :: Contest -> Socket -> IO()
   loop contest s = do
@@ -23,11 +23,11 @@ runServer contest path server = withSocketsDo $ do E.bracket (open path) close (
    if endCheck then return () else loop next s
   open :: FilePath -> IO Socket
   open path = do
-   sock <- socket AF_UNIX Stream 0 -- AF_UNIX is UDS? [TODO] study...
+   sock <- socket AF_UNIX Stream 0
    rmFile path
    ready sock
   ready s = do  
-   bind s (SockAddrUnix path) 
+   bind s (SockAddrUnix path)
    listen s 1
    return s -- ready
   rmFile :: FilePath -> IO()
@@ -35,7 +35,7 @@ runServer contest path server = withSocketsDo $ do E.bracket (open path) close (
 
 -- client part
 sendServer :: FilePath -> (Socket -> IO()) -> IO()
-sendServer path client = withSocketsDo $ do E.bracket (open path) close client
+sendServer path client = withSocketsDo $ E.bracket (open path) close client
  where
   open :: FilePath -> IO Socket
   open path = do

@@ -1,0 +1,19 @@
+atsubmit
+[Usage]: atsubmit [command]
+[command]:
+	login                    
+		this server login atcoder
+        stop                     
+		stop server
+        get [contest]_[question] (example: atsubmit get abc100_a)
+		get testcase of question 
+	show 
+		show already get contest
+        show [contest]_[question] (example: atsubmit show abc100_a)
+		show testcase of question 
+        submit [contest]_[question] [submit file] (example: atsubmit submit abc100_a sample.hs)
+		submit submit file for question 
+	test [contest]_[question] [test file] (example: atsubmit test abc100_a sample.hs)
+		test file for question. using docker.
+	help
+		show this text        

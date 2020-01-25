@@ -10,11 +10,11 @@ import qualified Data.Vector as V
 import System.Environment
 import System.IO
 
-sockpath = "socketest.sock"
+sockpath = "/.local/lib/atsubmit/atsubmit.sock"
 
 main :: IO ()
 main = do
  arg <- Prelude.map T.pack <$> getArgs
- if null arg then atLogin nullContest V.empty >>= \(b,c) -> runServer c sockpath server 
- else sendServer sockpath $ client arg
-
+ if null arg then atLogin nullContest V.empty >>= \(b,c) -> if c == nullContest then putStrLn "authentication error..." 
+                                                            else getEnv "HOME" >>= \path -> runServer c (path ++ sockpath) server 
+ else getEnv "HOME">>= \path -> sendServer (path ++ sockpath) $ client arg
