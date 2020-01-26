@@ -35,6 +35,7 @@ server sock contests = do
                             "submit" -> (atSubmit, False)
                             "test"   -> (atTest, False)
                             "login"  -> (atLogin, False)
+                            "result" -> (atResult, False)
                             "help"   -> (atHelp, False)
                             _        -> (notDo, False)
    (resStr, retc) <- func contests x
@@ -88,6 +89,23 @@ atSubmit contests msg = do
  postSubmit msg contests
  let submitStatus = T.pack "submit"
  return (submitStatus, contests)
+
+atResult :: AtFunc
+atResult contests msg = case (cname msg) of
+ (Just cm) -> do
+  res <- getContestResult cm contests
+  return (res, contests)
+ Nothing -> if V.null (questions contests) then return ("nothing", contests) else do
+  res <- T.unlines <$> loop ((reDup.V.map (T.takeWhile (/='_').T.takeWhileEnd (/='/').qurl)) (questions contests)) contests
+  return (res, contests)
+   where
+    loop :: V.Vector T.Text -> Contest -> IO [T.Text]
+    loop quest cont = if V.null quest then return [] else do
+     res <- getContestResult (V.head quest) cont
+     bef <- loop (V.tail quest) cont
+     return $ (T.append "===== " $ T.append (V.head quest) $ T.append " =====\n" res):bef
+    reDup :: V.Vector T.Text -> V.Vector T.Text
+    reDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
 
 atTest :: AtFunc
 atTest contests msg = case (qname msg, file msg) of

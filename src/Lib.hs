@@ -129,7 +129,7 @@ getCookieAndCsrfToken un pw = do
 getPageInfo :: AtSubmit -> Contest -> IO Question
 getPageInfo msg ud = case ((cname msg, qname msg)) of
  (Just cm, Just qm) -> do
-  let questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cm $ T.append (T.pack "/tasks/") qm
+  let questurl = T.append "https://atcoder.jp/contests/" $ T.append cm $ T.append "/tasks/" qm
   r <- parseRequest $ T.unpack questurl
   let req = setRequestHeader hCookie (cookie ud) r
   mng <- newManager tlsManagerSettings
@@ -149,6 +149,31 @@ getPageInfo msg ud = case ((cname msg, qname msg)) of
    | otherwise                                                                = (i, o):ioZip lists
   chnl :: T.Text -> T.Text
   chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
+
+getContestResult :: T.Text -> Contest -> IO T.Text
+getContestResult cnt ud = if T.null cnt then return T.empty else do
+ r <- parseRequest $ T.unpack $ T.append "https://atcoder.jp/contests/" $ T.append cnt "/submissions/me"
+ let req = setRequestHeader hCookie (cookie ud) r
+ mng <- newManager tlsManagerSettings
+ res <- Network.HTTP.Conduit.httpLbs req mng
+ if getResponseStatus res /= status200 then return T.empty
+ else resultIO.fromDocument.parseLBS.getResponseBody $ res
+  where
+   resultIO :: Cursor -> IO T.Text
+   resultIO cursor = do
+    let cn = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
+                                                                                  &// element "td"
+                                                                                  &// element "a"
+        result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
+                                                                            &// element "td"
+                                                                            &// attributeIs "aria-hidden" "true"
+    return $ zipLines cn result
+   lineNGet :: Int -> [Cursor] -> [Cursor]
+   lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
+   zipLines :: [T.Text] -> [T.Text] -> T.Text
+   zipLines [] [] = T.empty
+   zipLines (c:[]) (r:[]) = T.append c $ T.append " : " r 
+   zipLines (c:n) (r:s) = T.append c $ T.append " : " $ T.append r $ T.append "\n" $ zipLines n s 
 
 postSubmit :: AtSubmit -> Contest -> IO ()
 postSubmit msg ud = case ((cname msg, qname msg, file msg)) of

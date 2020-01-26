@@ -19,7 +19,7 @@ install:
 	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir $(LOCAL_LIB_PATH) ; fi
 	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir $(LOCAL_MAN_PATH) ; fi
 	@sudo install $(shell stack exec which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
-	@docker build docker/hs_container -t atjudge_hs --memory 1024m
+	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atjudge_hs --memory 1024m ; fi
 	@cp doc/help.man $(LOCAL_MAN_PATH)/atsubmit.man
 	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
 	@echo "installed"
