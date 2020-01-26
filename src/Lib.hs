@@ -23,6 +23,9 @@ import Turtle
 import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
 import qualified Data.Aeson as DA
+import qualified Text.Pandoc as TP
+import qualified Text.Pandoc.PDF as TPP
+import qualified Text.Pandoc.Writers as TPW
 
 dockershell = "~/.local/lib/atsubmit/docker_judge.sh"
 helpFile = "~/.local/share/man/atsubmit.man"
@@ -135,7 +138,9 @@ getPageInfo msg ud = case ((cname msg, qname msg)) of
   mng <- newManager tlsManagerSettings
   res <- Network.HTTP.Conduit.httpLbs req mng
   if getResponseStatus res /= status200 then return nullQuestion 
-  else return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
+  --else return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
+  else createPDF ((decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
+       createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res))
  _ -> return nullQuestion
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
@@ -149,6 +154,15 @@ getPageInfo msg ud = case ((cname msg, qname msg)) of
    | otherwise                                                                = (i, o):ioZip lists
   chnl :: T.Text -> T.Text
   chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
+  createPDF :: T.Text -> IO (Either BSL.ByteString BSL.ByteString) -- include bug
+  createPDF target = do
+   txt <- TP.runIOorExplode $ TP.readHtml TP.def target >>=
+          TPW.writeLaTeX TP.def { TP.writerVariables = [("documentclass","ltjsarticle")]}
+   TIO.writeFile "tex/input.tex" txt
+   last <- TIO.readFile "tex/check.tex"
+   TP.runIOorExplode $ TP.readLaTeX TP.def last >>= 
+                        TPP.makePDF "lualatex" ["--output-directory=tex" {-++ T.unpack (userdir msg)-} ] TPW.writeLaTeX
+                        TP.def {TP.writerVariables = [("documentclass","ltjsarticle")]}
 
 getContestResult :: T.Text -> Contest -> IO T.Text
 getContestResult cnt ud = if T.null cnt then return T.empty else do

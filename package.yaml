@@ -37,6 +37,8 @@ library:
           - turtle
           - foldl
           - aeson
+          - pandoc
+          - doctemplates
 
 executables:
   atsubmit-exe:
