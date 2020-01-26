@@ -22,12 +22,13 @@ import Control.Exception
 import Turtle
 import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
+import qualified Data.Aeson as DA
 
 dockershell = "~/.local/lib/atsubmit/docker_judge.sh"
-
 helpFile = "~/.local/share/man/atsubmit.man"
 
-type AtFunc = Contest -> V.Vector T.Text -> IO (T.Text, Contest)
+
+type AtFunc = Contest -> AtSubmit -> IO (T.Text, Contest)
 
 data Question = Question { qurl :: T.Text -- question page's url
                          , qio :: V.Vector (T.Text, T.Text) -- input, output
@@ -38,14 +39,51 @@ data Contest = Contest { questions :: V.Vector Question
                        , csrf_token :: T.Text
                        } deriving (Show, Eq)
 
+data AtSubmit = AtSubmit { rcom :: T.Text -- rawcommand
+                         , subcmd :: T.Text
+                         , cname :: Maybe T.Text -- contest name (ex abc120 
+                         , qname :: Maybe T.Text -- question name (ex a
+                         , file :: Maybe T.Text
+                         , userdir :: T.Text
+                         } deriving (Show, Eq)
+
+instance DA.FromJSON AtSubmit where
+ parseJSON (DA.Object v) = AtSubmit <$> (v DA..: "rcom")
+                                    <*> (v DA..: "subcmd")
+                                    <*> (v DA..:? "cname")
+                                    <*> (v DA..:? "qname")
+                                    <*> (v DA..:? "file")
+                                    <*> (v DA..: "userdir")
+
+instance DA.ToJSON AtSubmit where
+ toJSON (AtSubmit rc sc cn qn f u) = DA.object [ "rcom" DA..= rc
+                                               , "subcmd" DA..= sc
+                                               , "cname" DA..= cn
+                                               , "qname" DA..= qn
+                                               , "file" DA..= f
+                                               , "userdir" DA..= u]
+
+
 nullContest = Contest { questions = V.empty, cookie = [], csrf_token = T.empty}
 nullQuestion = Question { qurl = T.empty, qio = V.empty}
+nullAtSubmit = AtSubmit { rcom = T.empty, subcmd = T.empty, cname = Nothing, qname = Nothing, file = Nothing, userdir = T.empty}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
 createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
 
 createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
 createQuestion url io = Question { qurl = url, qio = io }
+
+createAtSubmit :: [T.Text] -> T.Text -> AtSubmit
+createAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r
+                                      , userdir = u}
+ where
+  listAtSubmit :: [T.Text] -> AtSubmit
+  listAtSubmit l = case Prelude.length l of
+   1 -> nullAtSubmit {subcmd = l !! 0, cname = Nothing, qname = Nothing, file = Nothing} 
+   2 -> nullAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Nothing}
+   3 -> nullAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Just (l !! 2)}
+   _ -> nullAtSubmit
 
 getAPIkeys :: [String] -> IO [String]
 getAPIkeys [] = return []
@@ -67,6 +105,7 @@ getAtKeys = do
 helpText :: IO T.Text
 helpText = TIO.readFile helpFile
 
+
 getCookieAndCsrfToken :: T.Text -> T.Text -> IO Contest
 getCookieAndCsrfToken un pw = do
  fstreq <- parseRequest "https://atcoder.jp/login"
@@ -87,44 +126,46 @@ getCookieAndCsrfToken un pw = do
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
 
-getPageInfo :: V.Vector T.Text -> Contest -> IO Question
-getPageInfo msg ud = do -- msg = [contestname]
- let cname = T.takeWhile (/='_') $ V.head msg
-     questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cname $ T.append (T.pack "/tasks/") $ V.head msg
- r <- parseRequest $ T.unpack questurl
- let req = setRequestHeader hCookie (cookie ud) r
- mng <- newManager tlsManagerSettings
- res <- Network.HTTP.Conduit.httpLbs req mng
- if getResponseStatus res /= status200 then return nullQuestion 
- else return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
-   where 
-    questionIO :: Cursor -> V.Vector (T.Text, T.Text)
-    questionIO cursor = do
-     let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
-     V.fromList.ioZip $ Prelude.map ((`T.append` "\n"). chnl).concatMap content $ Prelude.concat.Prelude.tail $ cs
-    ioZip :: [T.Text] -> [(T.Text, T.Text)]
-    ioZip (i:o:lists) 
-     | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
-     | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
-     | otherwise                                                                = (i, o):ioZip lists
-    chnl :: T.Text -> T.Text
-    chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
+getPageInfo :: AtSubmit -> Contest -> IO Question
+getPageInfo msg ud = case ((cname msg, qname msg)) of
+ (Just cm, Just qm) -> do
+  let questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cm $ T.append (T.pack "/tasks/") qm
+  r <- parseRequest $ T.unpack questurl
+  let req = setRequestHeader hCookie (cookie ud) r
+  mng <- newManager tlsManagerSettings
+  res <- Network.HTTP.Conduit.httpLbs req mng
+  if getResponseStatus res /= status200 then return nullQuestion 
+  else return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
+ _ -> return nullQuestion
+ where 
+  questionIO :: Cursor -> V.Vector (T.Text, T.Text)
+  questionIO cursor = do
+   let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
+   V.fromList.ioZip $ Prelude.map ((`T.append` "\n"). chnl).concatMap content $ Prelude.concat.Prelude.tail $ cs
+  ioZip :: [T.Text] -> [(T.Text, T.Text)]
+  ioZip (i:o:lists) 
+   | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
+   | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
+   | otherwise                                                                = (i, o):ioZip lists
+  chnl :: T.Text -> T.Text
+  chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
 
-postSubmit :: V.Vector T.Text -> Contest -> IO ()
-postSubmit msg ud = do
- let cname = T.takeWhile (/='_') $ V.head msg
-     questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cname (T.pack "/submit")
- source <- TIO.readFile $ T.unpack $ msg V.! 1
- r <- parseRequest $ T.unpack questurl
- let req = setRequestHeader hCookie (cookie ud) r
- response <- do
-  let postReq = urlEncodedBody [ ("data.TaskScreenName",(encodeUtf8.V.head) msg)
-                               , ("data.LanguageId", (encodeUtf8.T.pack) "3014") -- this id is only Haskell
-                               , ("sourceCode", encodeUtf8 source)
-                               , ("csrf_token", (encodeUtf8.csrf_token) ud)] req
-  manager <- newManager tlsManagerSettings
-  Network.HTTP.Conduit.httpLbs postReq manager
- return ()
+postSubmit :: AtSubmit -> Contest -> IO ()
+postSubmit msg ud = case ((cname msg, qname msg, file msg)) of
+ (Just cm, Just qm, Just fm) -> do
+  let questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cm (T.pack "/submit")
+  source <- TIO.readFile $ T.unpack $ T.append (userdir msg) $ T.append (T.singleton '/') fm
+  r <- parseRequest $ T.unpack questurl
+  let req = setRequestHeader hCookie (cookie ud) r
+  response <- do
+   let postReq = urlEncodedBody [ ("data.TaskScreenName",encodeUtf8 qm)
+                                , ("data.LanguageId", (encodeUtf8.T.pack) "3014") -- this id is only Haskell
+                                , ("sourceCode", encodeUtf8 source)
+                                , ("csrf_token", (encodeUtf8.csrf_token) ud)] req
+   manager <- newManager tlsManagerSettings
+   Network.HTTP.Conduit.httpLbs postReq manager
+  return ()
+ _ -> return ()
  
 postLogout :: Contest -> IO()
 postLogout ud = do
@@ -134,16 +175,25 @@ postLogout ud = do
  Network.HTTP.Conduit.httpLbs postReq manager
  return ()
 
-testLoop :: V.Vector (T.Text, T.Text) -> Int -> IO T.Text
-testLoop qs k = if V.null qs then return T.empty else do
+testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO T.Text
+testLoop qs dir k = if V.null qs then return T.empty else do
  TIO.writeFile infile $ (fst.V.head) qs
  TIO.writeFile outfile $ (snd.V.head) qs
- out <- (\case Nothing -> T.pack ""
-               Just a  -> lineToText a) <$> TS.fold (inshell dockershell empty) CF.head
- next <- testLoop (V.tail qs) (k+1)
+ ec <- shell dockershell empty
+ outres <- TIO.readFile outfile
+ comp <- TIO.readFile compfile
+ let out = case ec of
+                ExitFailure 1 -> T.append "CE\n" comp
+                ExitFailure 2 -> "WA (input error)\n"
+                ExitFailure _ -> "TLE\n"
+                ExitSuccess   -> if outres == (snd.V.head) qs then "AC" 
+                                 else T.append "WA\n" $ T.append "=== result ===\n" $ T.append outres 
+                                                      $ T.append "=== sample ===\n" $ (snd.V.head) qs
+ next <- testLoop (V.tail qs) dir (k+1)
  return $ T.append (T.append (msgCreate k) out) next
   where
    msgCreate :: Int -> T.Text
-   msgCreate n = T.append (T.pack "case ") $ T.append ((T.pack.show) n) (T.pack ": ")
-   infile = "~/.cache/atsubmit/src/input.txt"
-   outfile = "~/.cache/atsubmit/src/output.txt"
+   msgCreate n = T.append "case " $ T.append ((T.pack.show) n) ": "
+   infile = dir ++ "/.cache/atsubmit/src/input.txt"
+   outfile = dir ++ "/.cache/atsubmit/src/outres.txt"
+   compfile = dir ++ "/.cache/atsubmit/src/comp.txt"

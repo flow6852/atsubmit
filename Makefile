@@ -24,6 +24,9 @@ install:
 	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
 	@echo "installed"
 
+update:
+	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
+
 uninstall:
 	@rm -rf $(LOCAL_LIB_PATH) $(LOCAL_CACHE_PATH) $(LOCAL_CONF_PATH) $(LOCAL_MAN_PATH)/atsubmit.man $(LOCAL_BIN_PATH)/atsubmit
 	@docker rmi atjudge_hs
