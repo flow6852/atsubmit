@@ -67,7 +67,7 @@ atGetPage contests msg = case cname msg of
    Nothing -> do
     quest <- getPageInfo msg contests
     return $ if quest == nullQuestion then (T.pack "not found", contests) 
-                                      else (T.pack "get url,io", contests {questions = V.snoc (questions contests) quest})
+             else (T.pack "get url,io", contests {questions = V.snoc (questions contests) quest})
 
 atShowPage :: AtFunc
 atShowPage contests msg = case qname msg of
@@ -97,7 +97,7 @@ atResult contests msg = case cname msg of
   res <- getContestResult cm contests
   return (res, contests)
  Nothing -> if V.null (questions contests) then return ("nothing", contests) else do
-  res <- T.unlines <$> loop ((reDup.V.map (T.takeWhile (/='_').T.takeWhileEnd (/='/').qurl)) (questions contests)) contests
+  res <- T.unlines <$> loop ((rmDup.V.map (T.takeWhile (/='_').T.takeWhileEnd (/='/').qurl)) (questions contests)) contests
   return (res, contests)
    where
     loop :: V.Vector T.Text -> Contest -> IO [T.Text]
@@ -105,8 +105,6 @@ atResult contests msg = case cname msg of
      res <- getContestResult (V.head quest) cont
      bef <- loop (V.tail quest) cont
      return $ T.append "===== " (T.append (V.head quest) $ T.append " =====\n" res):bef
-    reDup :: V.Vector T.Text -> V.Vector T.Text
-    reDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
 
 atTest :: AtFunc
 atTest contests msg = case (qname msg, file msg) of

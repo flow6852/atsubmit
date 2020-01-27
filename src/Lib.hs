@@ -106,6 +106,9 @@ getAtKeys = do
 helpText :: IO T.Text
 helpText = TIO.readFile helpFile
 
+rmDup :: V.Vector T.Text -> V.Vector T.Text
+rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
+
 getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
 getRequestWrapper url cke = do
  req <- if cke == [] then parseRequest (T.unpack (T.append url "?lang=ja"))
@@ -133,14 +136,14 @@ getCookieAndCsrfToken un pw = do
   getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
 
 getPageInfo :: AtSubmit -> Contest -> IO Question
-getPageInfo msg ud = case ((cname msg, qname msg)) of
- (Just cm, Just qm) -> do
-  let questurl =  V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm]
-  res <- getRequestWrapper questurl (cookie ud)
-  if getResponseStatus res /= status200 then return nullQuestion 
-  else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
-   TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
-   createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res) fname) 
+getPageInfo msg ud = case (cname msg, qname msg) of
+ (Just cm, Just qm) -> let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm] in
+  if V.elem questurl ((V.map qurl.questions) ud) then return nullQuestion else do
+   res <- getRequestWrapper questurl (cookie ud)
+   if getResponseStatus res /= status200 then return nullQuestion 
+   else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
+    TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
+    createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res) fname) 
  _ -> return nullQuestion
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
@@ -203,7 +206,7 @@ testLoop qs dir k = if V.null qs then return T.empty else do
  comp <- TIO.readFile compfile
  let out = case ec of
                 ExitFailure 1 -> T.append "CE\n" comp
-                ExitFailure 2 -> "WA (input error)\n"
+                ExitFailure 2 -> "RE\n"
                 ExitFailure _ -> "TLE\n"
                 ExitSuccess   -> if outres == (snd.V.head) qs then "AC" 
                                  else V.foldl1 T.append ["WA\n", "=== result ===\n", outres, "=== sample ===\n", (snd.V.head) qs]
