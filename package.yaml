@@ -37,8 +37,6 @@ library:
           - turtle
           - foldl
           - aeson
-          - pandoc
-          - doctemplates
 
 executables:
   atsubmit-exe:
@@ -52,6 +50,7 @@ executables:
     - atsubmit
     - text
     - vector
+    - hdaemonize
 
 tests:
   atsubmit-test:

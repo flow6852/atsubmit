@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLists #-}
 
 module Lib where
 
@@ -23,18 +23,16 @@ import Turtle
 import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
 import qualified Data.Aeson as DA
-import qualified Text.Pandoc as TP
-import qualified Text.Pandoc.PDF as TPP
-import qualified Text.Pandoc.Writers as TPW
 
 dockershell = "~/.local/lib/atsubmit/docker_judge.sh"
 helpFile = "~/.local/share/man/atsubmit.man"
-
+ajax="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
 type AtFunc = Contest -> AtSubmit -> IO (T.Text, Contest)
 
 data Question = Question { qurl :: T.Text -- question page's url
                          , qio :: V.Vector (T.Text, T.Text) -- input, output
+                         , htmlpath :: System.IO.FilePath -- raw html file path
                          } deriving (Show, Eq)
 
 data Contest = Contest { questions :: V.Vector Question 
@@ -68,14 +66,14 @@ instance DA.ToJSON AtSubmit where
 
 
 nullContest = Contest { questions = V.empty, cookie = [], csrf_token = T.empty}
-nullQuestion = Question { qurl = T.empty, qio = V.empty}
+nullQuestion = Question { qurl = T.empty, qio = V.empty, htmlpath = ""}
 nullAtSubmit = AtSubmit { rcom = T.empty, subcmd = T.empty, cname = Nothing, qname = Nothing, file = Nothing, userdir = T.empty}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
 createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
 
-createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
-createQuestion url io = Question { qurl = url, qio = io }
+createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Question
+createQuestion url io fp = Question { qurl = url, qio = io, htmlpath = fp}
 
 createAtSubmit :: [T.Text] -> T.Text -> AtSubmit
 createAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r
@@ -108,22 +106,27 @@ getAtKeys = do
 helpText :: IO T.Text
 helpText = TIO.readFile helpFile
 
+getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
+getRequestWrapper url cke = do
+ req <- if cke == [] then parseRequest (T.unpack (T.append url "?lang=ja"))
+        else setRequestHeader hCookie cke <$> parseRequest (T.unpack (T.append url "?lang=ja"))
+ mng <- newManager tlsManagerSettings
+ Network.HTTP.Conduit.httpLbs req mng
+
+postRequestWrapper :: T.Text -> [BSC.ByteString] -> [(BSC.ByteString, T.Text)] -> IO (Response BSL.ByteString)
+postRequestWrapper url cke body = do
+ req <- setRequestHeader hCookie cke <$> parseRequest (T.unpack url)
+ let postReq = urlEncodedBody (Prelude.map (\(x,y) -> (x, encodeUtf8 y)) body) req
+ mng <- newManager tlsManagerSettings
+ Network.HTTP.Conduit.httpLbs postReq mng
 
 getCookieAndCsrfToken :: T.Text -> T.Text -> IO Contest
 getCookieAndCsrfToken un pw = do
- fstreq <- parseRequest "https://atcoder.jp/login"
- fstmng <- newManager tlsManagerSettings
- fstres <- Network.HTTP.Conduit.httpLbs fstreq fstmng
+ fstres <- getRequestWrapper "https://atcoder.jp/login" []
  let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
- let fstcookie = getResponseHeader hSetCookie fstres
- responce <- do
-  req <- setRequestHeader hCookie fstcookie.setRequestMethod "POST" <$> parseRequest "https://atcoder.jp/login"
-  let postReq = urlEncodedBody [("username", encodeUtf8 un),
-                                ("password", encodeUtf8 pw),
-                                ("csrf_token",encodeUtf8 csrf_tkn)] req
-  manager <- newManager tlsManagerSettings
-  Network.HTTP.Conduit.httpLbs postReq manager
- return $ if getResponseStatus responce /= status200 then nullContest 
+ let fstcke = getResponseHeader hSetCookie fstres
+ responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
+ return $ if getResponseStatus responce /= status200 then createContest V.empty [] ((T.pack.show.getResponseStatusCode) responce)
           else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
  where
   getCsrfToken :: T.Text -> T.Text
@@ -132,15 +135,12 @@ getCookieAndCsrfToken un pw = do
 getPageInfo :: AtSubmit -> Contest -> IO Question
 getPageInfo msg ud = case ((cname msg, qname msg)) of
  (Just cm, Just qm) -> do
-  let questurl = T.append "https://atcoder.jp/contests/" $ T.append cm $ T.append "/tasks/" qm
-  r <- parseRequest $ T.unpack questurl
-  let req = setRequestHeader hCookie (cookie ud) r
-  mng <- newManager tlsManagerSettings
-  res <- Network.HTTP.Conduit.httpLbs req mng
+  let questurl =  V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm]
+  res <- getRequestWrapper questurl (cookie ud)
   if getResponseStatus res /= status200 then return nullQuestion 
-  --else return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
-  else createPDF ((decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
-       createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res))
+  else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
+   TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
+   createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res) fname) 
  _ -> return nullQuestion
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
@@ -154,30 +154,20 @@ getPageInfo msg ud = case ((cname msg, qname msg)) of
    | otherwise                                                                = (i, o):ioZip lists
   chnl :: T.Text -> T.Text
   chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
-  createPDF :: T.Text -> IO (Either BSL.ByteString BSL.ByteString) -- include bug
-  createPDF target = do
-   txt <- TP.runIOorExplode $ TP.readHtml TP.def target >>=
-          TPW.writeLaTeX TP.def { TP.writerVariables = [("documentclass","ltjsarticle")]}
-   TIO.writeFile "tex/input.tex" txt
-   last <- TIO.readFile "tex/check.tex"
-   TP.runIOorExplode $ TP.readLaTeX TP.def last >>= 
-                        TPP.makePDF "lualatex" ["--output-directory=tex" {-++ T.unpack (userdir msg)-} ] TPW.writeLaTeX
-                        TP.def {TP.writerVariables = [("documentclass","ltjsarticle")]}
+  rewriteHtml :: T.Text -> T.Text
+  rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js?v=202001250219" ajax.T.replace "//cdn" "https://cdn"
 
 getContestResult :: T.Text -> Contest -> IO T.Text
 getContestResult cnt ud = if T.null cnt then return T.empty else do
- r <- parseRequest $ T.unpack $ T.append "https://atcoder.jp/contests/" $ T.append cnt "/submissions/me"
- let req = setRequestHeader hCookie (cookie ud) r
- mng <- newManager tlsManagerSettings
- res <- Network.HTTP.Conduit.httpLbs req mng
+ res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cnt, "/submissions/me"]) (cookie ud)
  if getResponseStatus res /= status200 then return T.empty
  else resultIO.fromDocument.parseLBS.getResponseBody $ res
   where
    resultIO :: Cursor -> IO T.Text
    resultIO cursor = do
     let cn = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
-                                                                                  &// element "td"
-                                                                                  &// element "a"
+                                                                                   &// element "td"
+                                                                                   &// element "a"
         result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                             &// element "td"
                                                                             &// attributeIs "aria-hidden" "true"
@@ -186,33 +176,23 @@ getContestResult cnt ud = if T.null cnt then return T.empty else do
    lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
    zipLines :: [T.Text] -> [T.Text] -> T.Text
    zipLines [] [] = T.empty
-   zipLines (c:[]) (r:[]) = T.append c $ T.append " : " r 
-   zipLines (c:n) (r:s) = T.append c $ T.append " : " $ T.append r $ T.append "\n" $ zipLines n s 
+   zipLines [c] [r] = V.foldl1 T.append [c, " : ", r]
+   zipLines (c:n) (r:s) = V.foldl1 T.append [c, " : ", r, "\n", zipLines n s]
 
 postSubmit :: AtSubmit -> Contest -> IO ()
-postSubmit msg ud = case ((cname msg, qname msg, file msg)) of
+postSubmit msg ud = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
-  let questurl = T.append (T.pack "https://atcoder.jp/contests/") $ T.append cm (T.pack "/submit")
-  source <- TIO.readFile $ T.unpack $ T.append (userdir msg) $ T.append (T.singleton '/') fm
-  r <- parseRequest $ T.unpack questurl
-  let req = setRequestHeader hCookie (cookie ud) r
-  response <- do
-   let postReq = urlEncodedBody [ ("data.TaskScreenName",encodeUtf8 qm)
-                                , ("data.LanguageId", (encodeUtf8.T.pack) "3014") -- this id is only Haskell
-                                , ("sourceCode", encodeUtf8 source)
-                                , ("csrf_token", (encodeUtf8.csrf_token) ud)] req
-   manager <- newManager tlsManagerSettings
-   Network.HTTP.Conduit.httpLbs postReq manager
+  source <- TIO.readFile $ T.unpack $ V.foldl1 T.append [userdir msg, T.singleton '/', fm]
+  let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/submit"]
+  res <- postRequestWrapper questurl (cookie ud) [ ("data.TaskScreenName", qm), ("data.LanguageId", "3014")
+                                                 , ("sourceCode", source), ("csrf_token", csrf_token ud)]
   return ()
  _ -> return ()
  
-postLogout :: Contest -> IO()
+postLogout :: Contest -> IO T.Text
 postLogout ud = do
- let url = "https://atcoder.jp/logout"
- postReq <- urlEncodedBody [("csrf_token", (encodeUtf8.csrf_token) ud)] <$> parseRequest url
- manager <- newManager tlsManagerSettings
- Network.HTTP.Conduit.httpLbs postReq manager
- return ()
+ res <- postRequestWrapper "https://atcoder.jp/logout" (cookie ud) [("csrf_token", csrf_token ud)]
+ return $ if getResponseStatus res /= status200 then "failuar logout" else "accept logout"
 
 testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO T.Text
 testLoop qs dir k = if V.null qs then return T.empty else do
@@ -226,10 +206,9 @@ testLoop qs dir k = if V.null qs then return T.empty else do
                 ExitFailure 2 -> "WA (input error)\n"
                 ExitFailure _ -> "TLE\n"
                 ExitSuccess   -> if outres == (snd.V.head) qs then "AC" 
-                                 else T.append "WA\n" $ T.append "=== result ===\n" $ T.append outres 
-                                                      $ T.append "=== sample ===\n" $ (snd.V.head) qs
+                                 else V.foldl1 T.append ["WA\n", "=== result ===\n", outres, "=== sample ===\n", (snd.V.head) qs]
  next <- testLoop (V.tail qs) dir (k+1)
- return $ T.append (T.append (msgCreate k) out) next
+ return $ V.foldl1 T.append [msgCreate k, out, next]
   where
    msgCreate :: Int -> T.Text
    msgCreate n = T.append "case " $ T.append ((T.pack.show) n) ": "

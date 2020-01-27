@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE BangPatterns #-}
 
 module AtCoderLib where
 
@@ -29,7 +30,7 @@ server sock contests = do
   Nothing -> NSBS.send sock ((encodeUtf8.T.pack) "parsing error")  >> return (False, contests)
   Just x  -> do
    let (func, retb) =  case (T.unpack.subcmd) x of
-                            "stop"   -> (atStop, True)
+                            "stop"   -> (atLogout, True)
                             "get"    -> (atGetPage, False)
                             "show"   -> (atShowPage, False)
                             "submit" -> (atSubmit, False)
@@ -55,7 +56,7 @@ client msg sock = do
 
 atLogin :: AtFunc
 atLogin contests msg = do 
- next <- getAtKeys >>= \[user, pass] -> getCookieAndCsrfToken (T.pack user) (T.pack pass)
+ !next <- getAtKeys >>= \[user, pass] -> getCookieAndCsrfToken (T.pack user) (T.pack pass)
  return (T.pack "login", next)
 
 atGetPage :: AtFunc 
@@ -74,11 +75,11 @@ atShowPage contests msg = case qname msg of
  Just qm -> do 
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
   let showPage = case mquest of Nothing -> T.pack "not found"
-                                Just a  -> V.foldl1 T.append $ V.map showMsg $ qio a
+                                Just a  -> T.append "htmlfile\n" $ T.append ((T.pack.htmlpath) a) $ V.foldl1 T.append $ V.map showMsg $ qio a
   return (showPage, contests)
    where
     showMsg :: (T.Text, T.Text) -> T.Text
-    showMsg q = V.foldl1 T.append ["input\n", fst q, "\noutput\n", snd q, "\n"]
+    showMsg q = V.foldl1 T.append ["\ninput\n", fst q, "\noutput\n", snd q]
 
 atAllShow :: V.Vector Question  -> T.Text
 atAllShow q = if V.null q then T.empty else T.append ((T.takeWhileEnd (/='/').qurl.V.head) q) 
@@ -91,8 +92,8 @@ atSubmit contests msg = do
  return (submitStatus, contests)
 
 atResult :: AtFunc
-atResult contests msg = case (cname msg) of
- (Just cm) -> do
+atResult contests msg = case cname msg of
+ Just cm -> do
   res <- getContestResult cm contests
   return (res, contests)
  Nothing -> if V.null (questions contests) then return ("nothing", contests) else do
@@ -103,7 +104,7 @@ atResult contests msg = case (cname msg) of
     loop quest cont = if V.null quest then return [] else do
      res <- getContestResult (V.head quest) cont
      bef <- loop (V.tail quest) cont
-     return $ (T.append "===== " $ T.append (V.head quest) $ T.append " =====\n" res):bef
+     return $ T.append "===== " (T.append (V.head quest) $ T.append " =====\n" res):bef
     reDup :: V.Vector T.Text -> V.Vector T.Text
     reDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
 
@@ -120,8 +121,8 @@ atTest contests msg = case (qname msg, file msg) of
  where
   mainfile = "/.cache/atsubmit/src/source.txt"
 
-atStop :: AtFunc
-atStop contests msg = postLogout contests >> return (T.pack "logout", nullContest)
+atLogout :: AtFunc
+atLogout contests msg = postLogout contests >>= \x -> return (x, nullContest)
 
 atHelp :: AtFunc
 atHelp contests msg = TIO.readFile helpFile >>= \x -> return (x, contests)

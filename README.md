@@ -2,15 +2,18 @@
 
 ```bash
 atsubmit login # relogin and get cookie
-atsubmit get [contest name] # getting latest page
-atsubmit submit [contest name] # submit for latest page
-atsubmit show [contest name] # show latest page (?)
-atsubmit test [contest name] # run test case using docker
-atsubmit result [contest name] # show result
+atsubmit get [question name] # getting latest page
+atsubmit submit [question name] # submit for latest page
+atsubmit show # show questions
+atsubmit show [question name] # show latest page (?)
+atsubmit test [question name] # run test case using docker
+atsubmit result # show all result about you get
+atsubmit result [question name] # show result
 atsubmit stop # stop server
 ```
 
 # TODO
 
- - use docker engine api and create test
- - create html to pdf
+ - use docker engine api
+ - create html to pdf (?)
+ - get [contest] ... get questions in [contest]

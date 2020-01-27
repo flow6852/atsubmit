@@ -1,1 +1,0 @@
-main = getLine >>= \x -> getLine >>= \y -> print $ 6-(read x)-(read y)
