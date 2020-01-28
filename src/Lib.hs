@@ -29,7 +29,7 @@ dockershell = "~/.local/lib/atsubmit/docker_judge.sh"
 helpFile = "~/.local/share/man/atsubmit.man"
 ajax="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
-type AtFunc = Contest -> AtSubmit -> IO (T.Text, Contest)
+type AtFunc = Contest -> AtSubmit -> IO ([T.Text], Contest)
 
 data Question = Question { qurl :: T.Text -- question page's url
                          , qio :: V.Vector (T.Text, T.Text) -- input, output
@@ -165,13 +165,13 @@ getPageInfo msg ud = case (cname msg, qname msg) of
   rewriteHtml :: T.Text -> T.Text
   rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js?v=202001250219" ajax.T.replace "//cdn" "https://cdn"
 
-getContestResult :: T.Text -> Contest -> IO T.Text
-getContestResult cnt ud = if T.null cnt then return T.empty else do
+getContestResult :: T.Text -> Contest -> IO [T.Text]
+getContestResult cnt ud = if T.null cnt then return [] else do
  res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cnt, "/submissions/me"]) (cookie ud)
- if getResponseStatus res /= status200 then return T.empty
+ if getResponseStatus res /= status200 then return []
  else resultIO.fromDocument.parseLBS.getResponseBody $ res
   where
-   resultIO :: Cursor -> IO T.Text
+   resultIO :: Cursor -> IO [T.Text]
    resultIO cursor = do
     let cn = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
                                                                                    &// element "td"
@@ -182,10 +182,10 @@ getContestResult cnt ud = if T.null cnt then return T.empty else do
     return $ zipLines cn result
    lineNGet :: Int -> [Cursor] -> [Cursor]
    lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
-   zipLines :: [T.Text] -> [T.Text] -> T.Text
-   zipLines [] [] = T.empty
-   zipLines [c] [r] = V.foldl1 T.append [c, " : ", r]
-   zipLines (c:n) (r:s) = V.foldl1 T.append [c, " : ", r, "\n", zipLines n s]
+   zipLines :: [T.Text] -> [T.Text] -> [T.Text]
+   zipLines [] [] = [] 
+   zipLines [c] [r] = [V.foldl1 T.append [c," : ",r]]
+   zipLines (c:n) (r:s) = (V.foldl1 T.append [c," : ",r]):zipLines n s
 
 postSubmit :: AtSubmit -> Contest -> IO ()
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
@@ -197,29 +197,30 @@ postSubmit msg ud = case (cname msg, qname msg, file msg) of
   return ()
  _ -> return ()
  
-postLogout :: Contest -> IO T.Text
+postLogout :: Contest -> IO [T.Text]
 postLogout ud = do
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie ud) [("csrf_token", csrf_token ud)]
- return $ if getResponseStatus res /= status200 then "failuar logout" else "accept logout"
+ return $ if getResponseStatus res /= status200 then ["failuar logout"] else ["accept logout"]
 
-testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO T.Text
-testLoop qs dir k = if V.null qs then return T.empty else do
+testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO [T.Text]
+testLoop qs dir k = if V.null qs then return [] else do
  TIO.writeFile infile $ (fst.V.head) qs
  TIO.writeFile outfile $ (snd.V.head) qs
  ec <- shell dockershell empty
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
- let out = case ec of
-                ExitFailure 1 -> T.append "CE\n" comp
-                ExitFailure 2 -> "RE\n"
-                ExitFailure _ -> "TLE\n"
-                ExitSuccess   -> if outres == (snd.V.head) qs then "AC" 
-                                 else V.foldl1 T.append ["WA\n", "=== result ===\n", outres, "=== sample ===\n", (snd.V.head) qs]
+ let out = msgCreate k (case ec of
+                             ExitFailure 1 -> ("CE", [[comp]])
+                             ExitFailure 2 -> ("RE", [])
+                             ExitFailure _ -> ("TLE", [])
+                             ExitSuccess   -> if outres == (snd.V.head) qs then ("AC", [])
+                                              else ("WA", [["=== result ===", outres], ["=== sample ===", (snd.V.head) qs]]))
  next <- testLoop (V.tail qs) dir (k+1)
- return $ V.foldl1 T.append [msgCreate k, out, next]
+ return $ out:next
   where
-   msgCreate :: Int -> T.Text
-   msgCreate n = T.append "case " $ T.append ((T.pack.show) n) ": "
+   msgCreate :: Int -> (T.Text, [[T.Text]]) -> T.Text
+   msgCreate n (status, res) = T.intercalate "\n".Prelude.map (\x -> Prelude.foldl1 T.append x)
+                                                              $ ["======= case ",(T.pack.show) n," ======="]:["status : ",status]:res
    infile = dir ++ "/.cache/atsubmit/src/input.txt"
    outfile = dir ++ "/.cache/atsubmit/src/outres.txt"
    compfile = dir ++ "/.cache/atsubmit/src/comp.txt"

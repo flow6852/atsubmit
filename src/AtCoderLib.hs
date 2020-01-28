@@ -40,12 +40,12 @@ server sock contests = do
                             "help"   -> (atHelp, False)
                             _        -> (notDo, False)
    (resStr, retc) <- func contests x
-                     `catch` (\e -> return ((T.pack.displayException) (e :: SomeException), contests))
-   NSBS.send sock $ toStrict.DA.encode $ x { restext = Just resStr }
+                     `catch` (\e -> return ([(T.pack.displayException) (e :: SomeException)], contests))
+   NSBS.send sock $ toStrict.DA.encode $ x { restext = Just $ T.intercalate "\n" resStr }
    return (retb, retc)
     where
      notDo :: AtFunc
-     notDo c m = return (T.empty, c)
+     notDo c m = return ([T.empty], c)
 
 client :: [T.Text] -> Socket -> IO()
 client msg sock = do
@@ -60,53 +60,50 @@ atLogin :: AtFunc
 atLogin contests msg = do 
  [user, pass] <- getAtKeys 
  next <- getCookieAndCsrfToken (T.pack user) (T.pack pass)
- let !retStr = if Prelude.null (cookie next) then "authention error..." else "login."
+ let !retStr = if Prelude.null (cookie next) then ["authention error..."] else ["login."]
  return (retStr, next)
 
 atGetPage :: AtFunc 
 atGetPage contests msg = case qname msg of
- Nothing -> return ("command error.", contests)
- Just qm -> if V.elem qm (V.map (T.takeWhileEnd (/='/').qurl) (questions contests)) then return ("already get.", contests) else do
+ Nothing -> return (["command error."], contests)
+ Just qm -> if V.elem qm (V.map (T.takeWhileEnd (/='/').qurl) (questions contests)) then return (["already get."], contests) else do
                quest <- getPageInfo msg contests
-               return $ if quest == nullQuestion then ("not found.", contests) 
-                        else ("get html, url and samples.", contests {questions = V.snoc (questions contests) quest})
+               return $ if quest == nullQuestion then (["not found."], contests) 
+                        else (["get html, url and samples."], contests {questions = V.snoc (questions contests) quest})
 
 atShowPage :: AtFunc
 atShowPage contests msg = case qname msg of
  Nothing -> return ((atAllShow.questions) contests, contests)
  Just qm -> do 
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
-  let showPage = case mquest of Nothing -> "not found"
-                                Just a  -> T.append "htmlfile\n" $ T.append ((T.pack.htmlpath) a) $ V.foldl1 T.append $ V.map showMsg $ qio a
+  let showPage = case mquest of Nothing -> ["not found"]
+                                Just a  -> (T.intercalate ":"["htmlfile", ((T.pack.htmlpath) a)]:((V.toList.showMsg.qio) a))
   return (showPage, contests)
    where
-    showMsg :: (T.Text, T.Text) -> T.Text
-    showMsg q = V.foldl1 T.append ["\ninput\n", fst q, "\noutput\n", snd q]
+    showMsg :: V.Vector (T.Text, T.Text) -> V.Vector T.Text
+    showMsg q = V.zipWith (\a b -> V.foldl1 T.append ["======= case ", (T.pack.show) a, " =======\n", b]) [1..(V.length q)]
+                          (V.map (\x -> V.foldl1 T.append ["===== input =====\n", fst x, "===== output =====\n", snd x]) q)
 
-atAllShow :: V.Vector Question  -> T.Text
-atAllShow q = if V.null q then T.empty else T.append ((T.takeWhileEnd (/='/').qurl.V.head) q) 
-                                          $ T.append (T.singleton '\n') $ atAllShow.V.tail $ q
+atAllShow :: V.Vector Question  -> [T.Text]
+atAllShow q = if V.null q then [] else ((T.takeWhileEnd (/='/').qurl.V.head) q):((atAllShow.V.tail) q)
 
 atSubmit :: AtFunc
-atSubmit contests msg = do
- postSubmit msg contests
- let submitStatus = "submit"
- return (submitStatus, contests)
+atSubmit contests msg = postSubmit msg contests >> return (["submit"], contests)
 
 atResult :: AtFunc
 atResult contests msg = case cname msg of
  Just cm -> do
   res <- getContestResult cm contests
   return (res, contests)
- Nothing -> if V.null (questions contests) then return ("nothing", contests) else do
-  res <- T.unlines <$> loop ((rmDup.V.map (T.takeWhile (/='_').T.takeWhileEnd (/='/').qurl)) (questions contests)) contests
+ Nothing -> if V.null (questions contests) then return (["nothing"], contests) else do
+  res <- loop ((rmDup.V.map (T.takeWhile (/='_').T.takeWhileEnd (/='/').qurl)) (questions contests)) contests
   return (res, contests)
    where
     loop :: V.Vector T.Text -> Contest -> IO [T.Text]
     loop quest cont = if V.null quest then return [] else do
-     res <- getContestResult (V.head quest) cont
+     res <- T.unlines <$> getContestResult (V.head quest) cont
      bef <- loop (V.tail quest) cont
-     return $ T.append "===== " (T.append (V.head quest) $ T.append " =====\n" res):bef
+     return $ "===== ":V.head quest:" =====":res:bef
 
 atTest :: AtFunc
 atTest contests msg = case (qname msg, file msg) of
@@ -114,10 +111,10 @@ atTest contests msg = case (qname msg, file msg) of
   home <- getHomeDirectory
   TIO.readFile (T.unpack (T.append (userdir msg) (T.append (T.singleton '/') fm))) >>= TIO.writeFile (home ++ mainfile)
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
-  result <- case mquest of Nothing -> return "not found"
+  result <- case mquest of Nothing -> return ["not found"]
                            Just a  -> testLoop (qio a) home 1
   return (result, contests)
- _  -> return (T.pack "command error.", contests)
+ _  -> return (["command error."], contests)
  where
   mainfile = "/.cache/atsubmit/src/source.txt"
 
@@ -125,4 +122,4 @@ atLogout :: AtFunc
 atLogout contests msg = postLogout contests >>= \x -> return (x, nullContest)
 
 atHelp :: AtFunc
-atHelp contests msg = TIO.readFile helpFile >>= \x -> return (x, contests)
+atHelp contests msg = TIO.readFile helpFile >>= \x -> return ([x], contests)
