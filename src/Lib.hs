@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Lib where
 
@@ -46,6 +47,7 @@ data AtSubmit = AtSubmit { rcom :: T.Text -- rawcommand
                          , qname :: Maybe T.Text -- question name (ex a
                          , file :: Maybe T.Text
                          , userdir :: T.Text
+                         , restext :: Maybe T.Text -- responce text
                          } deriving (Show, Eq)
 
 instance DA.FromJSON AtSubmit where
@@ -55,19 +57,22 @@ instance DA.FromJSON AtSubmit where
                                     <*> (v DA..:? "qname")
                                     <*> (v DA..:? "file")
                                     <*> (v DA..: "userdir")
+                                    <*> (v DA..:? "restext")
 
 instance DA.ToJSON AtSubmit where
- toJSON (AtSubmit rc sc cn qn f u) = DA.object [ "rcom" DA..= rc
-                                               , "subcmd" DA..= sc
-                                               , "cname" DA..= cn
-                                               , "qname" DA..= qn
-                                               , "file" DA..= f
-                                               , "userdir" DA..= u]
+ toJSON (AtSubmit rc sc cn qn f u rt) = DA.object [ "rcom" DA..= rc
+                                                  , "subcmd" DA..= sc
+                                                  , "cname" DA..= cn
+                                                  , "qname" DA..= qn
+                                                  , "file" DA..= f
+                                                  , "userdir" DA..= u
+                                                  , "restext" DA..=rt]
 
 
 nullContest = Contest { questions = V.empty, cookie = [], csrf_token = T.empty}
 nullQuestion = Question { qurl = T.empty, qio = V.empty, htmlpath = ""}
-nullAtSubmit = AtSubmit { rcom = T.empty, subcmd = T.empty, cname = Nothing, qname = Nothing, file = Nothing, userdir = T.empty}
+nullAtSubmit = AtSubmit { rcom = T.empty, subcmd = T.empty, cname = Nothing, qname = Nothing
+                        , file = Nothing, userdir = T.empty, restext = Nothing}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
 createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
@@ -111,8 +116,8 @@ rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.emp
 
 getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
 getRequestWrapper url cke = do
- req <- if cke == [] then parseRequest (T.unpack (T.append url "?lang=ja"))
-        else setRequestHeader hCookie cke <$> parseRequest (T.unpack (T.append url "?lang=ja"))
+ req <- if cke == [] then parseRequest (T.unpack url)
+        else setRequestHeader hCookie cke <$> parseRequest (T.unpack url)
  mng <- newManager tlsManagerSettings
  Network.HTTP.Conduit.httpLbs req mng
 
@@ -126,11 +131,11 @@ postRequestWrapper url cke body = do
 getCookieAndCsrfToken :: T.Text -> T.Text -> IO Contest
 getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
- let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
- let fstcke = getResponseHeader hSetCookie fstres
+ let !csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
+ let !fstcke = getResponseHeader hSetCookie fstres
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
  return $ if getResponseStatus responce /= status200 then createContest V.empty [] ((T.pack.show.getResponseStatusCode) responce)
-          else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
+                                                     else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
  where
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
