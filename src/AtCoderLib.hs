@@ -82,7 +82,7 @@ atShowPage contests msg = case qname msg of
    where
     showMsg :: V.Vector (T.Text, T.Text) -> V.Vector T.Text
     showMsg q = V.zipWith (\a b -> V.foldl1 T.append ["======= case ", (T.pack.show) a, " =======\n", b]) [1..(V.length q)]
-                          (V.map (\x -> V.foldl1 T.append ["===== input =====\n", fst x, "===== output =====\n", snd x]) q)
+                          (V.map (\x -> T.intercalate "\n" ["===== input =====", fst x, "===== output =====", snd x]) q)
 
 atAllShow :: V.Vector Question  -> [T.Text]
 atAllShow q = if V.null q then [] else ((T.takeWhileEnd (/='/').qurl.V.head) q):((atAllShow.V.tail) q)

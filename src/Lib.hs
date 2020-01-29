@@ -154,7 +154,7 @@ getPageInfo msg ud = case (cname msg, qname msg) of
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
   questionIO cursor = do
    let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
-   V.fromList.ioZip $ Prelude.map ((`T.append` "\n"). chnl).concatMap content $ Prelude.concat.Prelude.tail $ cs
+   V.fromList.ioZip $ Prelude.map chnl.concatMap content $ Prelude.concat.Prelude.tail $ cs
   ioZip :: [T.Text] -> [(T.Text, T.Text)]
   ioZip (i:o:lists) 
    | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
@@ -210,17 +210,22 @@ testLoop qs dir k = if V.null qs then return [] else do
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
  let out = msgCreate k (case ec of
-                             ExitFailure 1 -> ("CE", [[comp]])
+                             ExitFailure 1 -> ("CE", [comp])
                              ExitFailure 2 -> ("RE", [])
                              ExitFailure _ -> ("TLE", [])
-                             ExitSuccess   -> if outres == (snd.V.head) qs then ("AC", [])
-                                              else ("WA", [["=== result ===", outres], ["=== sample ===", (snd.V.head) qs]]))
+                             ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ("AC", [])
+                                              else ("WA", ["=== result ===", outres, "=== sample ===", (snd.V.head) qs]))
  next <- testLoop (V.tail qs) dir (k+1)
  return $ out:next
   where
-   msgCreate :: Int -> (T.Text, [[T.Text]]) -> T.Text
-   msgCreate n (status, res) = T.intercalate "\n".Prelude.map (\x -> Prelude.foldl1 T.append x)
-                                                              $ ["======= case ",(T.pack.show) n," ======="]:["status : ",status]:res
    infile = dir ++ "/.cache/atsubmit/src/input.txt"
    outfile = dir ++ "/.cache/atsubmit/src/outres.txt"
    compfile = dir ++ "/.cache/atsubmit/src/comp.txt"
+   checkResult :: [T.Text] -> [T.Text] -> Bool
+   checkResult [] []           = True
+   checkResult ([]:es) (ans)   = checkResult es ans
+   checkResult (r:es) (a:ns)   = if r == a then checkResult es ns else False
+   checkResult _ _             = False
+   msgCreate :: Int -> (T.Text, [T.Text]) -> T.Text
+   msgCreate n (status, res) = T.intercalate "\n" 
+    $ (V.foldl1 T.append ["======= case ",(T.pack.show) n," ======="]):T.append "status : " status:res
