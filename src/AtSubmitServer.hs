@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE BangPatterns #-}
 
-module AtCoderLib where
+module AtSubmitServer where
 
 import Lib
 
@@ -47,16 +47,6 @@ server sock contests = do
      notDo :: AtFunc
      notDo c m = return (c, createResAtStatus 400 "sub command undefined.")
 
-client :: [T.Text] -> Socket -> IO()
-client msg sock = do
- cwd <- T.pack <$> getCurrentDirectory
- let req = createReqAtSubmit msg cwd
- NSBS.send sock $ toStrict.DA.encode $ req
- json <- fromStrict <$> NSBS.recv sock 1024
- case DA.decode json :: Maybe ResAtSubmit of
-  Nothing -> TIO.putStrLn "json parse error"
-  Just x -> print x
-
 atLogin :: AtFunc
 atLogin contests msg = getAtKeys >>= \[user, pass] -> getCookieAndCsrfToken (T.pack user) (T.pack pass)
 
@@ -76,9 +66,6 @@ atShowPage contests msg = case qname msg of
                                 Just a  -> createResAtSubmit 200 "accept show" ((V.toList.V.map ltot.qio) a)
   return (contests, showPage)
    where
-    showMsg :: V.Vector (T.Text, T.Text) -> V.Vector T.Text
-    showMsg q = V.zipWith (\a b -> V.foldl1 T.append ["======= case ", (T.pack.show) a, " =======\n", b]) [1..(V.length q)]
-                          (V.map (\x -> T.intercalate "\n" ["===== input =====", fst x, "===== output =====", snd x]) q)
     ltot :: (T.Text, T.Text) -> [T.Text]
     ltot (a, b) = [a,b]
 
@@ -122,4 +109,5 @@ atLogout :: AtFunc
 atLogout contests msg = postLogout contests >>= \x -> return (nullContest, x)
 
 atHelp :: AtFunc
-atHelp contests msg = TIO.readFile helpFile >>= \x -> return (contests, createResAtSubmit 200 "help message" [[x]])
+atHelp contests msg = getHomeDirectory >>= \dir -> TIO.readFile (dir ++ helpFile) 
+                                       >>= \x -> return (contests, createResAtSubmit 200 "help message" [[x]])

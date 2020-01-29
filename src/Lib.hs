@@ -25,8 +25,8 @@ import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
 import qualified Data.Aeson as DA
 
-dockershell = "~/.local/lib/atsubmit/docker_judge.sh"
-helpFile = "~/.local/share/man/atsubmit.man"
+dockershell = "/.local/lib/atsubmit/docker_judge.sh"
+helpFile = "/.local/share/man/atsubmit.man"
 ajax="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
 type AtFunc = Contest -> ReqAtSubmit -> IO (Contest, ResAtSubmit)
@@ -198,13 +198,13 @@ getContestResult cnt ud = if T.null cnt then return [] else do
         result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                             &// element "td"
                                                                             &// attributeIs "aria-hidden" "true"
-    return $ zipLines 0 cn result
+    return $ zipLines cn result
    lineNGet :: Int -> [Cursor] -> [Cursor]
    lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
-   zipLines :: Int -> [T.Text] -> [T.Text] -> [[T.Text]]
-   zipLines k [] [] = [] 
-   zipLines k [c] [r] = [[(T.pack.show) k, c, r]]
-   zipLines k (c:n) (r:s) = [(T.pack.show) k, c, r]:zipLines (k+1) n s
+   zipLines :: [T.Text] -> [T.Text] -> [[T.Text]]
+   zipLines [] [] = [] 
+   zipLines [c] [r] = [[c, r]]
+   zipLines (c:n) (r:s) = [c, r]:zipLines n s
 
 postSubmit :: ReqAtSubmit -> Contest -> IO ResAtSubmit
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
@@ -227,15 +227,15 @@ testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO [[T.Tex
 testLoop qs dir k = if V.null qs then return [] else do
  TIO.writeFile infile $ (fst.V.head) qs
  TIO.writeFile outfile $ (snd.V.head) qs
- ec <- shell dockershell empty
+ ec <- shell (T.pack (dir ++ dockershell)) empty
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
  let out = case ec of
-                ExitFailure 1 -> ["CE", comp]
-                ExitFailure 2 -> ["RE"]
-                ExitFailure _ -> ["TLE"]
-                ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ["AC"]
-                                 else ["WA", outres, (snd.V.head) qs]
+                ExitFailure 1 -> [(T.pack.show) k, "CE", comp]
+                ExitFailure 2 -> [(T.pack.show) k, "RE"]
+                ExitFailure _ -> [(T.pack.show) k, "TLE"]
+                ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then [(T.pack.show) k, "AC"]
+                                 else [(T.pack.show) k, "WA", outres, (snd.V.head) qs]
  next <- testLoop (V.tail qs) dir (k+1)
  return $ out:next
   where
@@ -247,6 +247,3 @@ testLoop qs dir k = if V.null qs then return [] else do
    checkResult ([]:es) (ans)   = checkResult es ans
    checkResult (r:es) (a:ns)   = if r == a then checkResult es ns else False
    checkResult _ _             = False
-   msgCreate :: Int -> (T.Text, [T.Text]) -> T.Text
-   msgCreate n (status, res) = T.intercalate "\n" 
-    $ (V.foldl1 T.append ["======= case ",(T.pack.show) n," ======="]):T.append "status : " status:res

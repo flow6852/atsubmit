@@ -19,8 +19,9 @@ docker cp ${src} ${t}:/home/${main} >/dev/null 2>&1
 docker cp ${input} ${t}:/home/input.txt >/dev/null 2>&1
 docker start ${t} >/dev/null 2>&1
 timeout ${timer} docker wait ${t} >/dev/null 2>&1
+timecheck=$?
 check=$(docker inspect ${t} --format='{{.State.ExitCode}}')
 docker cp ${t}:/home/output.txt ${out} >/dev/null 2>&1
 docker cp ${t}:/home/comp.txt ${comp} >/dev/null 2>&1
 docker rm -f ${t} >/dev/null 2>&1
-exit ${check}
+if [ ${check} = ${timecheck} -o ${timecheck} = 0 ] ; then exit ${check}; else exit ${timecheck}; fi

@@ -3,7 +3,8 @@ module Main where
 
 import Lib
 import UnixDomainSocket
-import AtCoderLib
+import AtSubmitServer
+import AtSubmitClient
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
