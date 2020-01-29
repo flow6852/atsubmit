@@ -39,9 +39,9 @@ server sock contests = do
                             "result" -> (atResult, False)
                             "help"   -> (atHelp, False)
                             _        -> (notDo, False)
-   (resStr, retc) <- func contests x
-                     `catch` (\e -> return ([(T.pack.displayException) (e :: SomeException)], contests))
-   NSBS.send sock $ toStrict.DA.encode $ x { restext = Just $ T.intercalate "\n" resStr }
+   (res, retc) <- func contests x
+                   `catch` (\e -> return ([(T.pack.displayException) (e :: SomeException)], contests))
+   NSBS.send sock $ toStrict.DA.encode $ res
    return (retb, retc)
     where
      notDo :: AtFunc
@@ -52,32 +52,33 @@ client msg sock = do
  cwd <- T.pack <$> getCurrentDirectory
  NSBS.send sock $ toStrict.DA.encode $ createAtSubmit msg cwd
  json <- fromStrict <$> NSBS.recv sock 1024
- TIO.putStrLn $ case DA.decode json of Nothing -> "json parse error"
-                                       Just x  -> case restext x of Nothing -> "responce Nothing"
-                                                                    Just x  -> x
+ TIO.print $ case DA.decode json of Nothing -> "json parse error"
+                                    Just x  -> case resstatus x of Nothing -> "responce Nothing"
+                                                                   Just x  -> x
 
 atLogin :: AtFunc
 atLogin contests msg = do 
  [user, pass] <- getAtKeys 
  next <- getCookieAndCsrfToken (T.pack user) (T.pack pass)
- let !retStr = if Prelude.null (cookie next) then ["authention error..."] else ["login."]
- return (retStr, next)
+ let !res = if Prelude.null (cookie next) then createResAtStatus 1 else createResAtStatus 0
+ return (res, next)
 
 atGetPage :: AtFunc 
 atGetPage contests msg = case qname msg of
- Nothing -> return (["command error."], contests)
- Just qm -> if V.elem qm (V.map (T.takeWhileEnd (/='/').qurl) (questions contests)) then return (["already get."], contests) else do
-               quest <- getPageInfo msg contests
-               return $ if quest == nullQuestion then (["not found."], contests) 
-                        else (["get html, url and samples."], contests {questions = V.snoc (questions contests) quest})
+ Nothing -> return (createResAtStatus 1 , contests) -- json error
+ Just qm -> if V.elem qm (V.map (T.takeWhileEnd (/='/').qurl) (questions contests)) then return (createResAtStatus 2, contests)
+            else do -- already get
+               (quest, html) <- getPageInfo msg contests
+               return $ if quest == nullQuestion then (createResAtStatus 3, contests)  -- nothing
+                        else (createResAtSubmit 0 [] [] Just html, contests {questions = V.snoc (questions contests) quest})
 
 atShowPage :: AtFunc
 atShowPage contests msg = case qname msg of
  Nothing -> return ((atAllShow.questions) contests, contests)
  Just qm -> do 
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
-  let showPage = case mquest of Nothing -> ["not found"]
-                                Just a  -> (T.intercalate ":"["htmlfile", ((T.pack.htmlpath) a)]:((V.toList.showMsg.qio) a))
+  let showPage = case mquest of Nothing -> (createResAtStatus 1, contests)
+                                Just a  -> (createaResAtSubmit T.intercalate ":"["htmlfile", ((T.pack.htmlpath) a)]:((V.toList.showMsg.qio) a))
   return (showPage, contests)
    where
     showMsg :: V.Vector (T.Text, T.Text) -> V.Vector T.Text
