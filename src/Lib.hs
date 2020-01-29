@@ -40,10 +40,10 @@ data Contest = Contest { questions :: V.Vector Question
                        , csrf_token :: T.Text
                        } deriving (Show, Eq)
 
-data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- rawcommand
-                               , subcmd :: T.Text
+data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- raw command
+                               , subcmd :: T.Text -- text
                                , cname :: Maybe T.Text -- contest name (ex abc120 
-                               , qname :: Maybe T.Text -- question name (ex a
+                               , qname :: Maybe T.Text -- question name (ex abc_a
                                , file :: Maybe T.Text
                                , userdir :: T.Text
                                } deriving (Show, Eq)
@@ -51,7 +51,7 @@ data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- rawcommand
 data ResAtSubmit = ResAtSubmit { resstatus :: Int
                                , resio     :: [(T.Text, T.Text)]
                                , resresult :: [(T.Text, T.Text, T.Text)] -- (WA, output, testcase)
-                               , reshtml   :: Maybe T.Text -- htmlfile
+                               , failstr   :: Maybe T.Text -- htmlfile
                                } deriving (Show, Eq)
 
 instance DA.FromJSON ReqAtSubmit where
@@ -74,37 +74,37 @@ instance DA.FromJSON ResAtSubmit where
  parseJSON (DA.Object v) = ResAtSubmit <$> (v DA..: "resstatus")
                                        <*> (v DA..: "resio")
                                        <*> (v DA..: "resresult")
-                                       <*> (v DA..:? "reshtml")
+                                       <*> (v DA..:? "failstr")
 
 instance DA.ToJSON ResAtSubmit where
  toJSON (ResAtSubmit rs rio rr rh) = DA.object [ "resstatus" DA..= rs
                                                , "resio" DA..= rio
                                                , "resresult" DA..= rr
-                                               , "reshtml" DA..= rh]
+                                               , "failstr" DA..= rh]
 
 nullContest = Contest { questions = [], cookie = [], csrf_token = ""}
-nullQuestion = Question { qurl = "", qio = ""}
+nullQuestion = Question { qurl = "", qio = []}
 nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing, userdir = ""}
-nullResAtSubmit = ResAtSubmit { resstatus = -1, resio = [], resresult = [], reshtml = Nothing}
+nullResAtSubmit = ResAtSubmit { resstatus = -1, resio = [], resresult = [], failstr = Nothing}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
 createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
 
-createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Question
-createQuestion url io fp = Question { qurl = url, qio = io, htmlpath = fp}
+createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
+createQuestion url io = Question { qurl = url, qio = io}
 
-createReqAtSubmit :: [T.Text] -> T.Text -> reqAtSubmit
+createReqAtSubmit :: [T.Text] -> T.Text -> ReqAtSubmit
 createReqAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r, userdir = u}
  where
-  listAtSubmit :: [T.Text] -> AtSubmit
+  listAtSubmit :: [T.Text] -> ReqAtSubmit
   listAtSubmit l = case Prelude.length l of
    1 -> nullReqAtSubmit {subcmd = l !! 0, cname = Nothing, qname = Nothing, file = Nothing} 
    2 -> nullReqAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Nothing}
    3 -> nullReqAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Just (l !! 2)}
    _ -> nullReqAtSubmit
 
-createResAtSubmit :: Int -> [(T.Text, T.Text)] -> [(T.Text, T.Text, T.Text)] -> T.Text -> ResAtSubmit
-createResAtSubmit rs rio rr rh = ResAtSubmit { resstatus = rs, resio = rio, resresult = rr, reshtml = rh}
+createResAtSubmit :: Int -> [(T.Text, T.Text)] -> [(T.Text, T.Text, T.Text)] -> Maybe T.Text -> ResAtSubmit
+createResAtSubmit rs rio rr rh = ResAtSubmit { resstatus = rs, resio = rio, resresult = rr, failstr = rh}
 
 createResAtStatus :: Int -> ResAtSubmit
 createResAtStatus n = nullResAtSubmit { resstatus = n }
@@ -158,15 +158,15 @@ getCookieAndCsrfToken un pw = do
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
 
-getPageInfo :: AtSubmit -> Contest -> IO (Question, T.Text)
+getPageInfo :: ReqAtSubmit -> Contest -> IO (Question)
 getPageInfo msg ud = case (cname msg, qname msg) of
  (Just cm, Just qm) -> let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm] in
-  if V.elem questurl ((V.map qurl.questions) ud) then return (nullQuestion "") else do
+  if V.elem questurl ((V.map qurl.questions) ud) then return nullQuestion else do
    res <- getRequestWrapper questurl (cookie ud)
-   if getResponseStatus res /= status200 then return (nullQuestion, "")
+   if getResponseStatus res /= status200 then return nullQuestion
    else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
-    return ( createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
-           , ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) 
+    TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
+     createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)) 
  _ -> return nullQuestion
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
@@ -189,7 +189,7 @@ getContestResult cnt ud = if T.null cnt then return [] else do
  if getResponseStatus res /= status200 then return []
  else resultIO.fromDocument.parseLBS.getResponseBody $ res
   where
-   resultIO :: Cursor -> IO [T.Text]
+   resultIO :: Cursor -> IO [(T.Text, T.Text, T.Text)]
    resultIO cursor = do
     let cn = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
                                                                                    &// element "td"
@@ -197,15 +197,15 @@ getContestResult cnt ud = if T.null cnt then return [] else do
         result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                             &// element "td"
                                                                             &// attributeIs "aria-hidden" "true"
-    return $ zip3 [1..] cn result
+    return $ zipLines 0 cn result
    lineNGet :: Int -> [Cursor] -> [Cursor]
    lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
-   zipLines :: [T.Text] -> [T.Text] -> [(T.Text, T.Text, T.Text)]
-   zipLines [] [] = [] 
-   zipLines [c] [r] = [V.foldl1 T.append [c," : ",r]]
-   zipLines (c:n) (r:s) = (V.foldl1 T.append [c," : ",r]):zipLines n s
+   zipLines :: Int -> [T.Text] -> [T.Text] -> [(T.Text, T.Text, T.Text)]
+   zipLines k [] [] = [] 
+   zipLines k [c] [r] = [((T.pack.show) k, c, r)]
+   zipLines k (c:n) (r:s) = ((T.pack.show) k, c, r):zipLines (k+1) n s
 
-postSubmit :: AtSubmit -> Contest -> IO ()
+postSubmit :: ReqAtSubmit -> Contest -> IO ()
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
   source <- TIO.readFile $ T.unpack $ V.foldl1 T.append [userdir msg, T.singleton '/', fm]
@@ -227,12 +227,12 @@ testLoop qs dir k = if V.null qs then return [] else do
  ec <- shell dockershell empty
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
- let out = (case ec of
-                 ExitFailure 1 -> ("CE", comp, "")
-                 ExitFailure 2 -> ("RE", "", "")
-                 ExitFailure _ -> ("TLE", "", "")
-                 ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ("AC", "", "")
-                                  else ("WA", outres, (snd.V.head) qs])
+ let out = case ec of
+                ExitFailure 1 -> ("CE", comp, "")
+                ExitFailure 2 -> ("RE", "", "")
+                ExitFailure _ -> ("TLE", "", "")
+                ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ("AC", "", "")
+                                 else ("WA", outres, (snd.V.head) qs)
  next <- testLoop (V.tail qs) dir (k+1)
  return $ out:next
   where

@@ -18,7 +18,7 @@ main :: IO ()
 main = do
  arg <- Prelude.map T.pack <$> getArgs
  if null arg then do
-  (b,c) <- atLogin nullContest nullAtSubmit -- login 
+  (b,c) <- atLogin nullContest nullReqAtSubmit -- login 
   getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server
 --  if Prelude.null (cookie c) then (TIO.putStr.T.unlines) b >> TIO.putStrLn (csrf_token c)
 --  else (TIO.putStr.T.unlines) b >> getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server 
