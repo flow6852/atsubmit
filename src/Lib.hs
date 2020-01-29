@@ -29,7 +29,7 @@ dockershell = "~/.local/lib/atsubmit/docker_judge.sh"
 helpFile = "~/.local/share/man/atsubmit.man"
 ajax="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
-type AtFunc = Contest -> ReqAtSubmit -> IO (ResAtSubmit, Contest)
+type AtFunc = Contest -> ReqAtSubmit -> IO (Contest, ResAtSubmit)
 
 data Question = Question { qurl :: T.Text -- question page's url
                          , qio :: V.Vector (T.Text, T.Text) -- input, output
@@ -48,10 +48,9 @@ data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- raw command
                                , userdir :: T.Text
                                } deriving (Show, Eq)
 
-data ResAtSubmit = ResAtSubmit { resstatus :: Int
-                               , resio     :: [(T.Text, T.Text)]
-                               , resresult :: [(T.Text, T.Text, T.Text)] -- (WA, output, testcase)
-                               , failstr   :: Maybe T.Text -- htmlfile
+data ResAtSubmit = ResAtSubmit { resstatus :: Int    -- responce status 
+                               , resmsg    :: T.Text -- responce message
+                               , resresult :: [[T.Text]] -- [WA, output, testcase] or [input, output]
                                } deriving (Show, Eq)
 
 instance DA.FromJSON ReqAtSubmit where
@@ -72,20 +71,18 @@ instance DA.ToJSON ReqAtSubmit where
 
 instance DA.FromJSON ResAtSubmit where
  parseJSON (DA.Object v) = ResAtSubmit <$> (v DA..: "resstatus")
-                                       <*> (v DA..: "resio")
+                                       <*> (v DA..: "resmsg")
                                        <*> (v DA..: "resresult")
-                                       <*> (v DA..:? "failstr")
 
 instance DA.ToJSON ResAtSubmit where
- toJSON (ResAtSubmit rs rio rr rh) = DA.object [ "resstatus" DA..= rs
-                                               , "resio" DA..= rio
-                                               , "resresult" DA..= rr
-                                               , "failstr" DA..= rh]
+ toJSON (ResAtSubmit rs rm rr) = DA.object [ "resstatus" DA..= rs
+                                           , "resmsg" DA..= rm
+                                           , "resresult" DA..= rr]
 
 nullContest = Contest { questions = [], cookie = [], csrf_token = ""}
 nullQuestion = Question { qurl = "", qio = []}
 nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing, userdir = ""}
-nullResAtSubmit = ResAtSubmit { resstatus = -1, resio = [], resresult = [], failstr = Nothing}
+nullResAtSubmit = ResAtSubmit { resstatus = 100, resmsg = "nothing", resresult = []}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
 createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
@@ -103,11 +100,11 @@ createReqAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r, userdir = u}
    3 -> nullReqAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Just (l !! 2)}
    _ -> nullReqAtSubmit
 
-createResAtSubmit :: Int -> [(T.Text, T.Text)] -> [(T.Text, T.Text, T.Text)] -> Maybe T.Text -> ResAtSubmit
-createResAtSubmit rs rio rr rh = ResAtSubmit { resstatus = rs, resio = rio, resresult = rr, failstr = rh}
+createResAtSubmit :: Int -> T.Text -> [[T.Text]] -> ResAtSubmit
+createResAtSubmit rs rm rr = ResAtSubmit { resstatus = rs, resmsg = rm, resresult = rr}
 
-createResAtStatus :: Int -> ResAtSubmit
-createResAtStatus n = nullResAtSubmit { resstatus = n }
+createResAtStatus :: Int -> T.Text -> ResAtSubmit
+createResAtStatus n rm = nullResAtSubmit { resstatus = n, resmsg = rm }
 
 getAPIkeys :: [String] -> IO [String]
 getAPIkeys [] = return []
@@ -146,28 +143,32 @@ postRequestWrapper url cke body = do
  mng <- newManager tlsManagerSettings
  Network.HTTP.Conduit.httpLbs postReq mng
 
-getCookieAndCsrfToken :: T.Text -> T.Text -> IO Contest
+getCookieAndCsrfToken :: T.Text -> T.Text -> IO (Contest, ResAtSubmit)
 getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
- let !csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
- let !fstcke = getResponseHeader hSetCookie fstres
+ let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
+ let fstcke = getResponseHeader hSetCookie fstres
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
- return $ if getResponseStatus responce /= status200 then createContest V.empty [] ((T.pack.show.getResponseStatusCode) responce)
-                                                     else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
+ return $ if getResponseStatus responce /= status200 
+          then (createContest V.empty [] []
+               , createResAtStatus 403 (T.append "fail login. status code :" ((T.pack.show.getResponseStatusCode) responce)))
+          else (createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
+               , createResAtStatus 200 "accpet login")
  where
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
 
-getPageInfo :: ReqAtSubmit -> Contest -> IO (Question)
+getPageInfo :: ReqAtSubmit -> Contest -> IO (Question, ResAtSubmit)
 getPageInfo msg ud = case (cname msg, qname msg) of
  (Just cm, Just qm) -> let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm] in
-  if V.elem questurl ((V.map qurl.questions) ud) then return nullQuestion else do
+  if V.elem questurl ((V.map qurl.questions) ud) then return (nullQuestion, createResAtStatus 405 "already get.") else do
    res <- getRequestWrapper questurl (cookie ud)
-   if getResponseStatus res /= status200 then return nullQuestion
+   if getResponseStatus res /= status200 then return (nullQuestion, createResAtStatus 404 "not found.")
    else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
     TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
-     createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)) 
- _ -> return nullQuestion
+     createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
+     , createResAtStatus 200 "get html and test case.")
+ _ -> return (nullQuestion, createResAtStatus 400 "set contest name and question name")
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
   questionIO cursor = do
@@ -183,13 +184,13 @@ getPageInfo msg ud = case (cname msg, qname msg) of
   rewriteHtml :: T.Text -> T.Text
   rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js?v=202001250219" ajax.T.replace "//cdn" "https://cdn"
 
-getContestResult :: T.Text -> Contest -> IO [(T.Text, T.Text, T.Text)] -- time, question, result
+getContestResult :: T.Text -> Contest -> IO [[T.Text]] -- time, question, result
 getContestResult cnt ud = if T.null cnt then return [] else do
  res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cnt, "/submissions/me"]) (cookie ud)
  if getResponseStatus res /= status200 then return []
  else resultIO.fromDocument.parseLBS.getResponseBody $ res
   where
-   resultIO :: Cursor -> IO [(T.Text, T.Text, T.Text)]
+   resultIO :: Cursor -> IO [[T.Text]]
    resultIO cursor = do
     let cn = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
                                                                                    &// element "td"
@@ -200,27 +201,29 @@ getContestResult cnt ud = if T.null cnt then return [] else do
     return $ zipLines 0 cn result
    lineNGet :: Int -> [Cursor] -> [Cursor]
    lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
-   zipLines :: Int -> [T.Text] -> [T.Text] -> [(T.Text, T.Text, T.Text)]
+   zipLines :: Int -> [T.Text] -> [T.Text] -> [[T.Text]]
    zipLines k [] [] = [] 
-   zipLines k [c] [r] = [((T.pack.show) k, c, r)]
-   zipLines k (c:n) (r:s) = ((T.pack.show) k, c, r):zipLines (k+1) n s
+   zipLines k [c] [r] = [[(T.pack.show) k, c, r]]
+   zipLines k (c:n) (r:s) = [(T.pack.show) k, c, r]:zipLines (k+1) n s
 
-postSubmit :: ReqAtSubmit -> Contest -> IO ()
+postSubmit :: ReqAtSubmit -> Contest -> IO ResAtSubmit
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
   source <- TIO.readFile $ T.unpack $ V.foldl1 T.append [userdir msg, T.singleton '/', fm]
   let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/submit"]
   res <- postRequestWrapper questurl (cookie ud) [ ("data.TaskScreenName", qm), ("data.LanguageId", "3014")
                                                  , ("sourceCode", source), ("csrf_token", csrf_token ud)]
-  return ()
- _ -> return ()
+  return $ createResAtStatus 200 "submit."
+ _ -> return $ createResAtStatus 400 "set contest name, question name and file name for submit."
  
-postLogout :: Contest -> IO Int
+postLogout :: Contest -> IO ResAtSubmit
 postLogout ud = do
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie ud) [("csrf_token", csrf_token ud)]
- return $ if getResponseStatus res /= status200 then 1 else 0
+ return $ if getResponseStatus res /= status200 
+  then createResAtStatus 403 (T.append "fali logout. status code :" ((T.pack.show.getResponseStatusCode) res))
+  else createResAtStatus 200 "accept logout"
 
-testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO [(T.Text, T.Text, T.Text)] -- result, output, test
+testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO [[T.Text]]
 testLoop qs dir k = if V.null qs then return [] else do
  TIO.writeFile infile $ (fst.V.head) qs
  TIO.writeFile outfile $ (snd.V.head) qs
@@ -228,11 +231,11 @@ testLoop qs dir k = if V.null qs then return [] else do
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
  let out = case ec of
-                ExitFailure 1 -> ("CE", comp, "")
-                ExitFailure 2 -> ("RE", "", "")
-                ExitFailure _ -> ("TLE", "", "")
-                ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ("AC", "", "")
-                                 else ("WA", outres, (snd.V.head) qs)
+                ExitFailure 1 -> ["CE", comp]
+                ExitFailure 2 -> ["RE"]
+                ExitFailure _ -> ["TLE"]
+                ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ["AC"]
+                                 else ["WA", outres, (snd.V.head) qs]
  next <- testLoop (V.tail qs) dir (k+1)
  return $ out:next
   where
