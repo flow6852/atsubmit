@@ -27,7 +27,7 @@ import qualified Data.Aeson as DA
 
 dockershell = "/.local/lib/atsubmit/docker_judge.sh"
 helpFile = "/.local/share/man/atsubmit.man"
-ajax="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
+ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
 type AtFunc = Contest -> ReqAtSubmit -> IO (Contest, ResAtSubmit)
 
@@ -192,19 +192,22 @@ getContestResult cnt ud = if T.null cnt then return [] else do
   where
    resultIO :: Cursor -> IO [[T.Text]]
    resultIO cursor = do
-    let cn = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
-                                                                                   &// element "td"
-                                                                                   &// element "a"
+    let subtime = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
+                                                                             &// element "td"
+                                                                             &// attributeIs "class" "fixtime-second"
+        c = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
+                                                                                  &// element "td" 
+                                                                                  &// element "a" -- [question, uname, details]
         result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                             &// element "td"
                                                                             &// attributeIs "aria-hidden" "true"
-    return $ zipLines cn result
+    return $ zipLines subtime c result
    lineNGet :: Int -> [Cursor] -> [Cursor]
-   lineNGet n l = if Prelude.length l >= n then Prelude.head l:lineNGet n (drop n l) else []
-   zipLines :: [T.Text] -> [T.Text] -> [[T.Text]]
-   zipLines [] [] = [] 
-   zipLines [c] [r] = [[c, r]]
-   zipLines (c:n) (r:s) = [c, r]:zipLines n s
+   lineNGet k l = if Prelude.length l >= k then Prelude.head l:lineNGet k (drop k l) else []
+   zipLines :: [T.Text] -> [T.Text] -> [T.Text] -> [[T.Text]]
+   zipLines [] [] [] = [] 
+   zipLines [s] [c] [r] = [[s, c, r]]
+   zipLines (s:t) (c:n) (r:e) = [s, c, r]:zipLines t n e
 
 postSubmit :: ReqAtSubmit -> Contest -> IO ResAtSubmit
 postSubmit msg ud = case (cname msg, qname msg, file msg) of

@@ -27,7 +27,7 @@ server :: Socket -> Contest -> IO (Bool, Contest)
 server sock contests = do
  json <- fromStrict <$> NSBS.recv sock 1024 
  case DA.decode json :: Maybe ReqAtSubmit of
-  Nothing -> NSBS.send sock ((encodeUtf8.T.pack) "json parse error")  >> return (False, contests)
+  Nothing -> NSBS.send sock ((encodeUtf8.T.pack) "server : json parse error")  >> return (False, contests)
   Just x  -> do
    let (func, retb) =  case (T.unpack.subcmd) x of
                             "stop"   -> (atLogout, True)

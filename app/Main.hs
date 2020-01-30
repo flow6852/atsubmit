@@ -20,7 +20,7 @@ main = do
  arg <- Prelude.map T.pack <$> getArgs
  if null arg then do
   (c, b) <- atLogin nullContest nullReqAtSubmit -- login 
-  getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server
---  if Prelude.null (cookie c) then (TIO.putStr.T.unlines) b >> TIO.putStrLn (csrf_token c)
---  else (TIO.putStr.T.unlines) b >> getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server 
+--  getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server
+  if (resstatus b) /= 200 then TIO.putStrLn $ resmsg b
+  else (TIO.putStrLn.resmsg) b >> getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server 
  else getEnv "HOME">>= \path -> sendServer (path ++ sockpath) $ client arg

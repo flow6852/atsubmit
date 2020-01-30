@@ -30,7 +30,7 @@ client msg sock = do
  NSBS.send sock $ toStrict.DA.encode $ req
  json <- fromStrict <$> NSBS.recv sock 1024
  TIO.putStrLn (case DA.decode json :: Maybe ResAtSubmit of
-  Nothing -> "json parse error"
+  Nothing -> "responce : json parse error"
   Just x  -> case (subcmd req, resstatus x) of
                   ("stop", 200)   ->  resmsg x
                   ("get", 200)    ->  resmsg x
