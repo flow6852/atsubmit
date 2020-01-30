@@ -5,6 +5,7 @@
 module AtSubmitServer where
 
 import Lib
+import UnixDomainSocket
 
 import Data.Text.Encoding
 import Data.ByteString.Lazy.Internal
@@ -22,12 +23,13 @@ import System.Directory
 import Control.Applicative
 import Control.Exception
 import qualified Data.Aeson as DA
+import qualified Data.ByteString as BS
 
 server :: Socket -> Contest -> IO (Bool, Contest)
 server sock contests = do
- json <- fromStrict <$> NSBS.recv sock 1024 
+ json <- fromStrict.Prelude.foldl1 BS.append <$> recvMsg sock 1024 
  case DA.decode json :: Maybe ReqAtSubmit of
-  Nothing -> NSBS.send sock ((encodeUtf8.T.pack) "server : json parse error")  >> return (False, contests)
+  Nothing -> NSBS.send sock ((encodeUtf8.T.pack) "server : json parse error") >> return (False, contests)
   Just x  -> do
    let (func, retb) =  case (T.unpack.subcmd) x of
                             "stop"   -> (atLogout, True)
@@ -41,7 +43,7 @@ server sock contests = do
                             _        -> (notDo, False)
    (retc, res) <- func contests x `catch`
      (\e -> return (contests, createResAtStatus 400 (T.append "server error : " ((T.pack.displayException) (e :: SomeException)))))
-   NSBS.send sock $ toStrict.DA.encode $ res
+   sendMsg sock ((takeNList 1024.toStrict.DA.encode) res) 1024
    return (retb, retc)
     where
      notDo :: AtFunc

@@ -5,6 +5,7 @@
 module AtSubmitClient where
 
 import Lib
+import UnixDomainSocket
 
 import Data.Text.Encoding
 import Data.ByteString.Lazy.Internal
@@ -14,6 +15,7 @@ import qualified Data.Text.IO as TIO
 import Network.Socket
 import qualified Data.ByteString.Char8 as BSC
 import Data.ByteString.Lazy
+import qualified Data.ByteString as BS
 import Control.Monad
 import qualified Data.Vector as V
 import qualified Text.XML.Cursor as TXC
@@ -27,8 +29,11 @@ client :: [T.Text] -> Socket -> IO()
 client msg sock = do
  cwd <- T.pack <$> getCurrentDirectory
  let req = createReqAtSubmit msg cwd
- NSBS.send sock $ toStrict.DA.encode $ req
- json <- fromStrict <$> NSBS.recv sock 1024
+ print ((takeNList 1024.toStrict.DA.encode) req)
+ sendMsg sock ((takeNList 1024.toStrict.DA.encode) req) 1024
+ TIO.putStrLn "send"
+ json <- fromStrict.Prelude.foldl1 BS.append <$> recvMsg sock 1024
+ print json
  TIO.putStrLn (case DA.decode json :: Maybe ResAtSubmit of
   Nothing -> "responce : json parse error"
   Just x  -> case (subcmd req, resstatus x) of

@@ -129,6 +129,9 @@ helpText = TIO.readFile helpFile
 rmDup :: V.Vector T.Text -> V.Vector T.Text
 rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
 
+takeNList :: Int -> BS.ByteString -> [BS.ByteString]
+takeNList n base = BS.take n base:(if BS.length base > n then takeNList n (BS.drop n base) else [])
+
 getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
 getRequestWrapper url cke = do
  req <- if cke == [] then parseRequest (T.unpack url)
@@ -148,6 +151,7 @@ getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
  let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
  let fstcke = getResponseHeader hSetCookie fstres
+ print csrf_tkn
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
  return $ if getResponseStatus responce /= status200 
           then (createContest V.empty [] []
@@ -156,7 +160,7 @@ getCookieAndCsrfToken un pw = do
                , createResAtStatus 200 "accpet login")
  where
   getCsrfToken :: T.Text -> T.Text
-  getCsrfToken body = T.takeWhile (/= '\"') $ snd $ T.breakOnEnd (T.pack "value=\"") body
+  getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
 
 getPageInfo :: ReqAtSubmit -> Contest -> IO (Question, ResAtSubmit)
 getPageInfo msg ud = case (cname msg, qname msg) of
@@ -193,8 +197,7 @@ getContestResult cnt ud = if T.null cnt then return [] else do
    resultIO :: Cursor -> IO [[T.Text]]
    resultIO cursor = do
     let subtime = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
-                                                                             &// element "td"
-                                                                             &// attributeIs "class" "fixtime-second"
+                                                                             &// attributeIs "class" "fixtime fixtime-second"
         c = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
                                                                                   &// element "td" 
                                                                                   &// element "a" -- [question, uname, details]
