@@ -29,11 +29,8 @@ client :: [T.Text] -> Socket -> IO()
 client msg sock = do
  cwd <- T.pack <$> getCurrentDirectory
  let req = createReqAtSubmit msg cwd
- print ((takeNList 1024.toStrict.DA.encode) req)
- sendMsg sock ((takeNList 1024.toStrict.DA.encode) req) 1024
- TIO.putStrLn "send"
- json <- fromStrict.Prelude.foldl1 BS.append <$> recvMsg sock 1024
- print json
+ sendMsg sock ((toStrict.DA.encode) req) 1024
+ json <- fromStrict <$> recvMsg sock 1024
  TIO.putStrLn (case DA.decode json :: Maybe ResAtSubmit of
   Nothing -> "responce : json parse error"
   Just x  -> case (subcmd req, resstatus x) of

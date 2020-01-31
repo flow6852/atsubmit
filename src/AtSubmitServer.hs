@@ -27,9 +27,9 @@ import qualified Data.ByteString as BS
 
 server :: Socket -> Contest -> IO (Bool, Contest)
 server sock contests = do
- json <- fromStrict.Prelude.foldl1 BS.append <$> recvMsg sock 1024 
+ json <- fromStrict <$> recvMsg sock 1024 
  case DA.decode json :: Maybe ReqAtSubmit of
-  Nothing -> NSBS.send sock ((encodeUtf8.T.pack) "server : json parse error") >> return (False, contests)
+  Nothing -> sendMsg sock (errMsg "server : json parse error") 1024 >> return (False, contests)
   Just x  -> do
    let (func, retb) =  case (T.unpack.subcmd) x of
                             "stop"   -> (atLogout, True)
@@ -43,11 +43,13 @@ server sock contests = do
                             _        -> (notDo, False)
    (retc, res) <- func contests x `catch`
      (\e -> return (contests, createResAtStatus 400 (T.append "server error : " ((T.pack.displayException) (e :: SomeException)))))
-   sendMsg sock ((takeNList 1024.toStrict.DA.encode) res) 1024
+   sendMsg sock ((toStrict.DA.encode) res) 1024
    return (retb, retc)
-    where
-     notDo :: AtFunc
-     notDo c m = return (c, createResAtStatus 400 "sub command undefined.")
+ where
+  notDo :: AtFunc
+  notDo c m = return (c, createResAtStatus 400 "sub command undefined.")
+  errMsg :: T.Text -> BS.ByteString
+  errMsg = toStrict.DA.encode.createResAtStatus 405
 
 atLogin :: AtFunc
 atLogin contests msg = getAtKeys >>= \[user, pass] -> getCookieAndCsrfToken (T.pack user) (T.pack pass)

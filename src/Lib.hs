@@ -130,7 +130,7 @@ rmDup :: V.Vector T.Text -> V.Vector T.Text
 rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
 
 takeNList :: Int -> BS.ByteString -> [BS.ByteString]
-takeNList n base = BS.take n base:(if BS.length base > n then takeNList n (BS.drop n base) else [])
+takeNList n base = BS.take n base:(if BS.length base < n then [] else takeNList n (BS.drop n base))
 
 getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
 getRequestWrapper url cke = do
@@ -151,16 +151,17 @@ getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
  let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
  let fstcke = getResponseHeader hSetCookie fstres
- print csrf_tkn
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
- return $ if getResponseStatus responce /= status200 
+ return $ if (checkFailLogin.getResponseBody) responce
           then (createContest V.empty [] []
-               , createResAtStatus 403 (T.append "fail login. status code :" ((T.pack.show.getResponseStatusCode) responce)))
+               , createResAtStatus 403 "fail login.")
           else (createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
                , createResAtStatus 200 "accpet login")
  where
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
+  checkFailLogin :: BSL.ByteString -> Bool
+  checkFailLogin = Prelude.null.($// attributeIs "class" "alert alert-success alert-dismissible col-sm-12 fade in").fromDocument.parseLBS
 
 getPageInfo :: ReqAtSubmit -> Contest -> IO (Question, ResAtSubmit)
 getPageInfo msg ud = case (cname msg, qname msg) of

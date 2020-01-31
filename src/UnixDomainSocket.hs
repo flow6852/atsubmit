@@ -13,6 +13,7 @@ import System.Directory
 import qualified Control.Exception as E
 import qualified Data.Vector as V
 import Data.Text.Encoding
+import qualified Data.Text as T
 
 -- server part
 runServer :: Contest -> FilePath -> (Socket -> Contest -> IO (Bool, Contest)) -> IO()
@@ -46,21 +47,28 @@ sendServer path client = withSocketsDo $ E.bracket (open path) close client
    connect s (SockAddrUnix path)
    return s
 
-recvMsg :: Socket -> Int -> IO [S.ByteString] 
+recvMsg :: Socket -> Int -> IO S.ByteString
 recvMsg sock n = do
- S.putStrLn "server recieve"
- msg <- NSBS.recv sock n
- print msg
- S.putStrLn "server send"
- if "." == decodeUtf8 msg then NSBS.send sock (encodeUtf8 "0") >> return []
-                          else NSBS.send sock (encodeUtf8 "1") >> recvMsg sock n >>= \next -> return (msg:next)
+ mlth <- read.T.unpack.decodeUtf8 <$> NSBS.recv sock n
+ NSBS.send sock $ encodeUtf8.T.pack.show.min mlth $ n
+ recvLoop sock (min mlth n) >>= return.Prelude.foldl1 S.append
+  where
+   recvLoop :: Socket -> Int -> IO [S.ByteString]
+   recvLoop s k = do
+    msg <- NSBS.recv s k 
+    case decodeUtf8 msg of
+     "0" -> NSBS.send s "0" >> return [] -- end recieve
+     _   -> NSBS.send s "1" >> recvLoop s k >>= \next -> return (msg:next)
  
-sendMsg :: Socket -> [S.ByteString] -> Int -> IO ()
+sendMsg :: Socket -> S.ByteString -> Int -> IO ()
 sendMsg sock msg n = do
- print msg
- S.putStrLn "send"
- NSBS.send sock $ if Prelude.null msg then "." else  Prelude.head msg
- S.putStrLn "recv"
- res <- decodeUtf8 <$> NSBS.recv sock n
- case res of "0" -> return ()
-             "1" -> sendMsg sock (Prelude.tail msg) n
+ NSBS.send sock $ (encodeUtf8.T.pack.show) n
+ mlth <- min n.read.T.unpack.decodeUtf8 <$> NSBS.recv sock n
+ sendLoop sock (takeNList mlth msg) mlth
+  where
+   sendLoop :: Socket -> [S.ByteString] -> Int -> IO()
+   sendLoop s m k = do
+    NSBS.send s $ if Prelude.null m then encodeUtf8 "0" else Prelude.head m -- end send / send head
+    res <- decodeUtf8 <$> NSBS.recv s k
+    case res of "0" -> return ()
+                _   -> sendLoop s (Prelude.tail m) k >> return ()
