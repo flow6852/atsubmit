@@ -22,6 +22,6 @@ main = do
  if null arg then do
   (c, b) <- atLogin nullContest nullReqAtSubmit `catch` (\e ->
             TIO.putStrLn ((T.pack.displayException) (e :: SomeException)) >> return (nullContest, nullResAtSubmit))  -- login 
-  if (resstatus b) /= 200 then TIO.putStrLn $ resmsg b else (TIO.putStrLn.resmsg) b 
-  getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server 
+  if (resstatus b) /= 200 then TIO.putStrLn $ resmsg b 
+  else (TIO.putStrLn.resmsg) b >>  getEnv "HOME" >>= \path -> daemonize $ runServer c (path ++ sockpath) server 
  else getEnv "HOME">>= \path -> sendServer (path ++ sockpath) $ client arg
