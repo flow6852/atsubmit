@@ -4,6 +4,7 @@
 
 module Lib where
 
+import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Encoding
@@ -95,10 +96,16 @@ createReqAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r, userdir = u}
  where
   listAtSubmit :: [T.Text] -> ReqAtSubmit
   listAtSubmit l = case Prelude.length l of
-   1 -> nullReqAtSubmit {subcmd = l !! 0, cname = Nothing, qname = Nothing, file = Nothing} 
-   2 -> nullReqAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Nothing}
-   3 -> nullReqAtSubmit {subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1)), qname = Just (l !! 1), file = Just (l !! 2)}
+   1 -> nullReqAtSubmit { subcmd = l !! 0, cname = Nothing, qname = Nothing, file = Nothing} 
+   2 -> nullReqAtSubmit { subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1))
+                        , qname = getQName (l !! 1), file = Nothing}
+   3 -> nullReqAtSubmit { subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1))
+                        , qname = getQName (l !! 1), file = Just (l !! 2)}
    _ -> nullReqAtSubmit
+  getQName :: T.Text -> Maybe T.Text
+  getQName txt = case T.find (=='_') txt of
+   Nothing -> Nothing
+   Just a  -> Just txt
 
 createResAtSubmit :: Int -> T.Text -> [[T.Text]] -> ResAtSubmit
 createResAtSubmit rs rm rr = ResAtSubmit { resstatus = rs, resmsg = rm, resresult = rr}
@@ -163,12 +170,24 @@ getCookieAndCsrfToken un pw = do
   checkFailLogin :: BSL.ByteString -> Bool
   checkFailLogin = Prelude.null.($// attributeIs "class" "alert alert-success alert-dismissible col-sm-12 fade in").fromDocument.parseLBS
 
+getContestInfo :: ReqAtSubmit -> Contest -> IO (V.Vector T.Text, ResAtSubmit) -- (question name, Responce)
+getContestInfo msg ud = case (cname msg, qname msg) of
+ (Just cm, Nothing) -> let contesturl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks"] in do
+  res <- getRequestWrapper contesturl (cookie ud)
+  if getResponseStatus res /= status200 then return ([], createResAtStatus 404 "tasks not found.")
+  else let base = (fromDocument.parseLBS.getResponseBody) res in 
+   return ((V.fromList.quests) base, createResAtStatus 200 ("end"))
+ where
+  quests :: Cursor -> [T.Text]
+  quests = (Prelude.map (T.takeWhileEnd (/='/')).Prelude.concatMap (attribute "href").
+           ($// attributeIs "class" "text-center no-break" &// element "a"))
+
 getPageInfo :: ReqAtSubmit -> Contest -> IO (Question, ResAtSubmit)
 getPageInfo msg ud = case (cname msg, qname msg) of
  (Just cm, Just qm) -> let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm] in
   if V.elem questurl ((V.map qurl.questions) ud) then return (nullQuestion, createResAtStatus 405 "already get.") else do
    res <- getRequestWrapper questurl (cookie ud)
-   if getResponseStatus res /= status200 then return (nullQuestion, createResAtStatus 404 "not found.")
+   if getResponseStatus res /= status200 then return (nullQuestion, createResAtStatus 404 "question not found.")
    else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
     TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
      createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
@@ -187,7 +206,7 @@ getPageInfo msg ud = case (cname msg, qname msg) of
   chnl :: T.Text -> T.Text
   chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
   rewriteHtml :: T.Text -> T.Text
-  rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js?v=202001250219" ajax.T.replace "//cdn" "https://cdn"
+  rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn"
 
 getContestResult :: T.Text -> Contest -> IO [[T.Text]] -- time, question, result
 getContestResult cnt ud = if T.null cnt then return [] else do

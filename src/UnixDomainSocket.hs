@@ -51,14 +51,15 @@ recvMsg :: Socket -> Int -> IO S.ByteString
 recvMsg sock n = do
  mlth <- read.T.unpack.decodeUtf8 <$> NSBS.recv sock n
  NSBS.send sock $ encodeUtf8.T.pack.show.min mlth $ n
- recvLoop sock (min mlth n) >>= return.Prelude.foldl1 S.append
+ rcv <- recvLoop sock (min mlth n)
+ return $ (Prelude.foldl1 S.append) rcv
   where
    recvLoop :: Socket -> Int -> IO [S.ByteString]
    recvLoop s k = do
     msg <- NSBS.recv s k 
     case decodeUtf8 msg of
-     "0" -> NSBS.send s "0" >> return [] -- end recieve
-     _   -> NSBS.send s "1" >> recvLoop s k >>= \next -> return (msg:next)
+     "EOF" -> return [] -- end recieve
+     _     -> NSBS.send s "1" >> recvLoop s k >>= \next -> return (msg:next)
  
 sendMsg :: Socket -> S.ByteString -> Int -> IO ()
 sendMsg sock msg n = do
@@ -67,8 +68,7 @@ sendMsg sock msg n = do
  sendLoop sock (takeNList mlth msg) mlth
   where
    sendLoop :: Socket -> [S.ByteString] -> Int -> IO()
-   sendLoop s m k = do
-    NSBS.send s $ if Prelude.null m then encodeUtf8 "0" else Prelude.head m -- end send / send head
+   sendLoop s m k = if Prelude.null m then NSBS.sendAll s (encodeUtf8 "EOF") else do
+    NSBS.send s $ Prelude.head m -- end send / send head
     res <- decodeUtf8 <$> NSBS.recv s k
-    case res of "0" -> return ()
-                _   -> sendLoop s (Prelude.tail m) k >> return ()
+    sendLoop s (Prelude.tail m) k

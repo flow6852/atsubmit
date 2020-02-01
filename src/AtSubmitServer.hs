@@ -42,7 +42,7 @@ server sock contests = do
                             "help"   -> (atHelp, False)
                             _        -> (notDo, False)
    (retc, res) <- func contests x `catch`
-     (\e -> return (contests, createResAtStatus 400 (T.append "server error : " ((T.pack.displayException) (e :: SomeException)))))
+    (\e -> return (contests, createResAtStatus 400 (T.append "server error : " ((T.pack.displayException) (e :: SomeException)))))
    sendMsg sock ((toStrict.DA.encode) res) 1024
    return (retb, retc)
  where
@@ -55,27 +55,37 @@ atLogin :: AtFunc
 atLogin contests msg = getAtKeys >>= \[user, pass] -> getCookieAndCsrfToken (T.pack user) (T.pack pass)
 
 atGetPage :: AtFunc 
-atGetPage contests msg = case qname msg of
- Nothing -> return (contests, createResAtStatus 400 "json error") -- json error
- Just qm -> if V.elem qm (V.map (T.takeWhileEnd (/='/').qurl) (questions contests)) 
-            then return (contests, createResAtStatus 405 "already get.")
-            else getPageInfo msg contests >>= \(x,y) -> return (contests {questions = V.snoc (questions contests) x}, y)
+atGetPage contests msg = case (qname msg, cname msg) of
+ (Just qm, Just cm) -> if V.elem qm (V.map (T.takeWhileEnd (/='/').qurl) (questions contests)) 
+                       then return (contests, createResAtStatus 405 "already get.")
+                       else getPageInfo msg contests >>= \(x,y) -> return (contests {questions = V.snoc (questions contests) x}, y)
+ (Nothing, Just cm) -> do 
+                        (x, y) <- getContestInfo msg contests 
+                        qs     <- loop x msg contests 
+                        return (contests {questions = (questions contests) V.++ qs} , createResAtStatus 200 "get all")
+ _                  -> return (contests, createResAtStatus 400 "json error") -- json error
+ where
+  loop :: V.Vector T.Text -> ReqAtSubmit -> Contest -> IO (V.Vector Question)
+  loop t m c = if V.null t then return V.empty else do
+   (q, r) <- getPageInfo (m { qname = Just (V.head t)}) c 
+   next <- loop (V.tail t) m c
+   return (V.cons q next)
 
 atShowPage :: AtFunc
-atShowPage contests msg = case qname msg of
- Nothing -> return (contests, createResAtSubmit 200 "all show." [(atAllShow.questions) contests])
- Just qm -> do 
+atShowPage contests msg = case (cname msg, qname msg) of
+ (Nothing, Nothing) -> return (contests, createResAtSubmit 200 "all show." [(atAllShow.questions) contests])
+ (Just cm, Just qm) -> do
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
   let showPage = case mquest of Nothing -> createResAtStatus 405 "not get."
                                 Just a  -> createResAtSubmit 200 "accept show" ((V.toList.V.map ltot.qio) a)
   return (contests, showPage)
-   where
-    ltot :: (T.Text, T.Text) -> [T.Text]
-    ltot (a, b) = [a,b]
+ _                  -> return (contests, createResAtStatus 405 "nothing contest name")
+ where
+  ltot :: (T.Text, T.Text) -> [T.Text]
+  ltot (a, b) = [a, b]
 
-atAllShow :: V.Vector Question  -> [T.Text]
-atAllShow [] = []
-atAllShow q  = ((T.takeWhileEnd (/='/').qurl.V.head) q):((atAllShow.V.tail) q)
+atAllShow :: V.Vector Question -> [T.Text]
+atAllShow = V.toList.V.map (T.takeWhileEnd (/='/').qurl)
 
 atSubmit :: AtFunc
 atSubmit contests msg = postSubmit msg contests >>= \x ->  return (contests, x)
@@ -97,8 +107,8 @@ atResult contests msg = case cname msg of
      return $ ([V.head quest]:res) ++ bef
 
 atTest :: AtFunc
-atTest contests msg = case (qname msg, file msg) of
- (Just qm, Just fm) -> do
+atTest contests msg = case (cname msg, qname msg, file msg) of
+ (Just cm, Just qm, Just fm) -> do
   home <- getHomeDirectory
   TIO.readFile (T.unpack (T.append (userdir msg) (T.append (T.singleton '/') fm))) >>= TIO.writeFile (home ++ mainfile)
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
