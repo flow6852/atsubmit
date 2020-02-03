@@ -62,4 +62,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - atsubmit
+    - text
+    - vector
+    - hdaemonize
     - directory

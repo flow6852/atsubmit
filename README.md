@@ -13,17 +13,13 @@ atsubmit result # show all result about you get
 atsubmit result [question name] # show result
 atsubmit stop # stop server
 ```
-
-# message flow
-
-0. server receives from client
-1. client sends number of byte size of client to server and waits to receive. 
-2. server sends number of smaller size of client or server to client. and waits to receive.
-3. client sends body every samller one and server receive one.
-4. if client sends all message, client send "EOF" to receive last.
-5. server work and response by same flow.
-
 # JSON
+
+## First 
+{
+	"socksize":"size of one receiver"
+	"datasize":"all size of sender message"
+}
 
 ## Request
 
@@ -46,9 +42,6 @@ atsubmit stop # stop server
 
 # subcommand
 
-
 # TODO
 
  - use docker engine api
- - create html to pdf (?)
- - get [contest] ... get questions in [contest]

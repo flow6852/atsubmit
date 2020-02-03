@@ -8,12 +8,24 @@ import Data.List
 import Network.Socket
 import qualified Network.Socket.ByteString as NSBS
 import qualified Data.ByteString as S
+import Data.ByteString.Lazy
 import Control.Monad
 import System.Directory
 import qualified Control.Exception as E
 import qualified Data.Vector as V
 import Data.Text.Encoding
 import qualified Data.Text as T
+import qualified Data.Aeson as DA
+
+data  Sizes = Sizes { socksize :: Int
+                    , datasize :: Int
+                    } deriving (Show, Eq)
+
+instance DA.ToJSON Sizes where
+ toJSON (Sizes s d) = DA.object [ "socksize" DA..= s, "datasize" DA..= d]
+
+instance DA.FromJSON Sizes where
+ parseJSON (DA.Object v) = Sizes <$> (v DA..: "socksize") <*> (v DA..: "datasize" )
 
 -- server part
 runServer :: Contest -> FilePath -> (Socket -> Contest -> IO (Bool, Contest)) -> IO()
@@ -49,26 +61,29 @@ sendServer path client = withSocketsDo $ E.bracket (open path) close client
 
 recvMsg :: Socket -> Int -> IO S.ByteString
 recvMsg sock n = do
- mlth <- read.T.unpack.decodeUtf8 <$> NSBS.recv sock n
- NSBS.send sock $ encodeUtf8.T.pack.show.min mlth $ n
- rcv <- recvLoop sock (min mlth n)
- return $ (Prelude.foldl1 S.append) rcv
-  where
-   recvLoop :: Socket -> Int -> IO [S.ByteString]
-   recvLoop s k = do
-    msg <- NSBS.recv s k 
-    case decodeUtf8 msg of
-     "EOF" -> return [] -- end recieve
-     _     -> NSBS.send s "1" >> recvLoop s k >>= \next -> return (msg:next)
+ json <- fromStrict <$> NSBS.recv sock n
+ case DA.decode json of
+  Just size -> do
+    NSBS.send sock $ toStrict.DA.encode $ size {socksize = min (socksize size) n} -- deside receive size
+    rcv <- recvLoop sock (min (socksize size) n) 0
+    return $ (Prelude.foldl1 S.append) rcv where
+                                            recvLoop :: Socket -> Int -> Int -> IO [S.ByteString]
+                                            recvLoop s k i = do
+                                             msg <- NSBS.recv s k
+                                             if (S.length msg) + i == (datasize size) then return [msg]
+                                             else if (S.length msg) + i > (datasize size) then return [msg]
+                                             else  recvLoop s k ((S.length msg) + i) >>= \next -> return (msg:next)
+  _         -> return S.empty
  
 sendMsg :: Socket -> S.ByteString -> Int -> IO ()
 sendMsg sock msg n = do
- NSBS.send sock $ (encodeUtf8.T.pack.show) n
- mlth <- min n.read.T.unpack.decodeUtf8 <$> NSBS.recv sock n
- sendLoop sock (takeNList mlth msg) mlth
-  where
-   sendLoop :: Socket -> [S.ByteString] -> Int -> IO()
-   sendLoop s m k = if Prelude.null m then NSBS.sendAll s (encodeUtf8 "EOF") else do
-    NSBS.send s $ Prelude.head m -- end send / send head
-    res <- decodeUtf8 <$> NSBS.recv s k
-    sendLoop s (Prelude.tail m) k
+ NSBS.send sock $ toStrict.DA.encode $ Sizes {socksize = n, datasize = S.length msg}
+ json <- fromStrict <$> NSBS.recv sock n -- deside send size
+ case DA.decode json of
+  Just size -> sendLoop sock (takeNList (socksize size) msg)
+  _         -> return ()
+ where
+  sendLoop :: Socket -> [S.ByteString] -> IO()
+  sendLoop s m = do 
+   NSBS.send s $ Prelude.head m
+   if Prelude.length m == 1 then return () else  sendLoop s (Prelude.tail m)
