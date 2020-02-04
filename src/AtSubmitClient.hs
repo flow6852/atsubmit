@@ -35,7 +35,7 @@ client msg sock = do
   Nothing -> "responce : json parse error"
   Just x  -> case (subcmd req, resstatus x) of
                   ("stop", 200)   ->  resmsg x
-                  ("get", 200)    ->  resmsg x
+                  ("get", 200)    ->  T.intercalate "\n".Prelude.concat.resresult $ x
                   ("show", 200)   ->  T.intercalate "\n".(if qname req == Nothing then Prelude.head else atShowRes) $ resresult x
                   ("submit", 200) ->  resmsg x
                   ("test", 200)   ->  testShow.resresult $ x

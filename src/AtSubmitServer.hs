@@ -62,7 +62,8 @@ atGetPage contests msg = case (qname msg, cname msg) of
  (Nothing, Just cm) -> do 
                         (x, y) <- getContestInfo msg contests 
                         qs     <- loop x msg contests 
-                        return (contests {questions = (questions contests) V.++ qs} , createResAtStatus 200 "get all")
+                        return ( contests {questions = (questions contests) V.++ qs}
+                               , createResAtSubmit 200 "get all" ((V.toList.V.map T.words) x))
  _                  -> return (contests, createResAtStatus 400 "json error") -- json error
  where
   loop :: V.Vector T.Text -> ReqAtSubmit -> Contest -> IO (V.Vector Question)

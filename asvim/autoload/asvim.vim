@@ -11,6 +11,12 @@ function! asvim#AtSubmit(...)
 			let cmd = "atsubmit " . a:1 . " " . a:2 . " " . expand("%")
 		else
 			let cmd = "atsubmit " . a:1 . " " . a:2
+			if a:1 == "get"
+				let ret = system(cmd)
+				echo join(split(ret, "\n"), ".html ")
+				call system("chromium " . join(split(ret, "\n"), ".html ") . ".html &")
+				let cmd = "echo " . a:2
+			endif
 		endif
 	else
 		let cmd = "echo fail: argument"

@@ -176,7 +176,7 @@ getContestInfo msg ud = case (cname msg, qname msg) of
   res <- getRequestWrapper contesturl (cookie ud)
   if getResponseStatus res /= status200 then return ([], createResAtStatus 404 "tasks not found.")
   else let base = (fromDocument.parseLBS.getResponseBody) res in 
-   return ((V.fromList.quests) base, createResAtStatus 200 ("end"))
+   return ((V.fromList.quests) base, createResAtStatus 200 "end")
  where
   quests :: Cursor -> [T.Text]
   quests = (Prelude.map (T.takeWhileEnd (/='/')).Prelude.concatMap (attribute "href").
@@ -191,7 +191,7 @@ getPageInfo msg ud = case (cname msg, qname msg) of
    else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
     TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
      createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
-     , createResAtStatus 200 "get html and test case.")
+     , createResAtSubmit 200 "get html and test case." [[qm]])
  _ -> return (nullQuestion, createResAtStatus 400 "set contest name and question name")
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
