@@ -256,13 +256,12 @@ testLoop qs dir k = if V.null qs then return [] else do
  ec <- shell (T.pack (dir ++ dockershell)) empty
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
- let out = case ec of
-                ExitFailure 1 -> [(T.pack.show) k, "CE", comp]
-                ExitFailure 2 -> [(T.pack.show) k, "RE"]
-                ExitFailure _ -> [(T.pack.show) k, "TLE"]
-                ExitSuccess   -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then [(T.pack.show) k, "AC"]
-                                 else [(T.pack.show) k, "WA", outres, (snd.V.head) qs]
- next <- testLoop (V.tail qs) dir (k+1)
+ (out, next) <- (\x -> case ec of
+                       ExitFailure 1 -> ([(T.pack.show) k, "CE", comp], [])
+                       ExitFailure 2 -> ([(T.pack.show) k, "RE"], x)
+                       ExitFailure _ -> ([(T.pack.show) k, "TLE"], x)
+                       ExitSuccess   -> (if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ([(T.pack.show) k, "AC"], x)
+                                          else ([(T.pack.show) k, "WA", outres, (snd.V.head) qs], x))) <$> testLoop (V.tail qs) dir (k+1)
  return $ out:next
   where
    infile = dir ++ "/.cache/atsubmit/src/input.txt"
