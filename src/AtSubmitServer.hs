@@ -43,6 +43,7 @@ server sock contests = do
                             _        -> (notDo, False)
    (retc, res) <- func contests x `catch`
     (\e -> return (contests, createResAtStatus 400 (T.append "server error : " ((T.pack.displayException) (e :: SomeException)))))
+   print res
    sendMsg sock ((toStrict.DA.encode) res) 1024
    return (retb, retc)
  where

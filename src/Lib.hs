@@ -218,15 +218,21 @@ getContestResult cnt ud = if T.null cnt then return [] else do
    resultIO cursor = do
     let subtime = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                              &// attributeIs "class" "fixtime fixtime-second"
-        c = Prelude.concatMap content.lineNGet 4.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive" 
-                                                                                  &// element "td" 
-                                                                                  &// element "a" -- [question, uname, details]
+        c = Prelude.concatMap content.lineNGet (cOrP (cursor)).Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
+                                                                                                &// element "td"
+                                                                                                &// element "a" -- [question, uname, details]
         result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                             &// element "td"
                                                                             &// attributeIs "aria-hidden" "true"
     return $ zipLines subtime c result
+   cOrP :: Cursor -> Int 
+   cOrP cs = do
+    let ch = cs $// attributeIs "class" "table-responsive"
+                &// element "td"
+                &// attributeIs "class" "glyphicon glyphicon-search black"
+    if Prelude.null ch then 3 else 4
    lineNGet :: Int -> [Cursor] -> [Cursor]
-   lineNGet k l = if Prelude.length l >= k then Prelude.head l:lineNGet k (drop k l) else []
+   lineNGet k l = if Prelude.length l >= k then Prelude.head l:lineNGet k (drop k l) else [] -- in contest, lineNGet 3 list else lineNGet 4
    zipLines :: [T.Text] -> [T.Text] -> [T.Text] -> [[T.Text]]
    zipLines [] [] [] = [] 
    zipLines [s] [c] [r] = [[s, c, r]]
