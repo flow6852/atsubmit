@@ -22,11 +22,13 @@ import qualified Data.ByteString.Lazy as BSL
 import Text.HTML.DOM as H
 import Control.Exception
 import Turtle
+import System.Directory
 import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
 import qualified Data.Aeson as DA
 
 dockershell = "/.local/lib/atsubmit/docker_judge.sh"
+langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
 ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
@@ -54,6 +56,15 @@ data ResAtSubmit = ResAtSubmit { resstatus :: Int    -- responce status
                                , resresult :: [[T.Text]] -- [WA, output, testcase] or [input, output]
                                } deriving (Show, Eq)
 
+data LangJson = LangJson { name :: T.Text
+                         , extention :: V.Vector T.Text
+                         , docker_image :: T.Text
+                         , main_file :: T.Text
+                         , langid :: T.Text
+                         } deriving (Show, Eq)
+
+data LJBase = LJBase { language :: V.Vector LangJson } deriving (Show, Eq)
+
 instance DA.FromJSON ReqAtSubmit where
  parseJSON (DA.Object v) = ReqAtSubmit <$> (v DA..: "rcom")
                                        <*> (v DA..: "subcmd")
@@ -80,10 +91,29 @@ instance DA.ToJSON ResAtSubmit where
                                            , "resmsg" DA..= rm
                                            , "resresult" DA..= rr]
 
+instance DA.FromJSON LJBase where parseJSON (DA.Object v) = LJBase <$> (v DA..: "language")
+instance DA.ToJSON LJBase where toJSON (LJBase l) = DA.object [ "language" DA..= l ]
+
+instance DA.FromJSON LangJson where
+ parseJSON (DA.Object v) = LangJson <$> (v DA..: "name")
+                                    <*> (v DA..: "extention")
+                                    <*> (v DA..: "docker_image")
+                                    <*> (v DA..: "main_file")
+                                    <*> (v DA..: "langid")
+
+instance DA.ToJSON LangJson where
+ toJSON (LangJson n e d m l) = DA.object [ "name" DA..= n
+                                          , "extention" DA..= e
+                                          , "docker_image" DA..= d
+                                          , "main_file" DA..= m
+                                          , "langid" DA..= l]
+
+
 nullContest = Contest { questions = [], cookie = [], csrf_token = ""}
 nullQuestion = Question { qurl = "", qio = []}
 nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing, userdir = ""}
 nullResAtSubmit = ResAtSubmit { resstatus = 100, resmsg = "nothing", resresult = []}
+nullLangJson = LangJson { name = "", extention = [], docker_image = "", main_file = "", langid = ""}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
 createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
@@ -238,12 +268,28 @@ getContestResult cnt ud = if T.null cnt then return [] else do
    zipLines [s] [c] [r] = [[s, c, r]]
    zipLines (s:t) (c:n) (r:e) = [s, c, r]:zipLines t n e
 
+languageSelect :: T.Text -> IO (LangJson)-- name, extention, docker_image, main_file, langid
+languageSelect fp = do
+ home <- getHomeDirectory 
+ json <- BSL.fromStrict <$> BS.readFile (home ++ langJson)
+ case DA.decode json :: Maybe LJBase of
+  Nothing -> return nullLangJson
+  Just lists -> do
+   print $ language lists 
+   case V.find (\i -> V.elem (getExtention fp) (extention i)) (language lists) of 
+    Nothing   -> return nullLangJson
+    Just lang -> return lang
+ where
+  getExtention :: T.Text -> T.Text
+  getExtention = T.takeWhileEnd (\x -> x/='.')
+
 postSubmit :: ReqAtSubmit -> Contest -> IO ResAtSubmit
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
   source <- TIO.readFile $ T.unpack $ V.foldl1 T.append [userdir msg, T.singleton '/', fm]
+  lang <- languageSelect fm
   let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/submit"]
-  res <- postRequestWrapper questurl (cookie ud) [ ("data.TaskScreenName", qm), ("data.LanguageId", "3014")
+  res <- postRequestWrapper questurl (cookie ud) [ ("data.TaskScreenName", qm), ("data.LanguageId", langid lang)
                                                  , ("sourceCode", source), ("csrf_token", csrf_token ud)]
   return $ createResAtStatus 200 "submit."
  _ -> return $ createResAtStatus 400 "set contest name, question name and file name for submit."
@@ -255,11 +301,11 @@ postLogout ud = do
   then createResAtStatus 403 (T.append "fali logout. status code :" ((T.pack.show.getResponseStatusCode) res))
   else createResAtStatus 200 "accept logout"
 
-testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> Int -> IO [[T.Text]]
-testLoop qs dir k = if V.null qs then return [] else do
+testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> LangJson -> Int -> IO [[T.Text]]
+testLoop qs dir lang k = if V.null qs then return [] else do
  TIO.writeFile infile $ (fst.V.head) qs
  TIO.writeFile outfile $ (snd.V.head) qs
- ec <- shell (T.pack (dir ++ dockershell)) empty
+ ec <- shell (V.foldl1 T.append [T.pack dir, dockershell, " ", docker_image lang, " ", main_file lang]) empty
  outres <- TIO.readFile outfile
  comp <- TIO.readFile compfile
  (out, next) <- (\x -> case ec of
@@ -267,7 +313,7 @@ testLoop qs dir k = if V.null qs then return [] else do
                        ExitFailure 2 -> ([(T.pack.show) k, "RE"], x)
                        ExitFailure _ -> ([(T.pack.show) k, "TLE"], x)
                        ExitSuccess   -> (if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ([(T.pack.show) k, "AC"], x)
-                                          else ([(T.pack.show) k, "WA", outres, (snd.V.head) qs], x))) <$> testLoop (V.tail qs) dir (k+1)
+                                         else ([(T.pack.show) k, "WA", outres, (snd.V.head) qs], x))) <$> testLoop (V.tail qs) dir lang (k+1)
  return $ out:next
   where
    infile = dir ++ "/.cache/atsubmit/src/input.txt"

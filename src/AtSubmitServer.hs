@@ -112,10 +112,11 @@ atTest :: AtFunc
 atTest contests msg = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
   home <- getHomeDirectory
+  lang <- languageSelect fm
   TIO.readFile (T.unpack (T.append (userdir msg) (T.append (T.singleton '/') fm))) >>= TIO.writeFile (home ++ mainfile)
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
   (resint, result, resmsg) <- case mquest of Nothing -> return (405, [], "not get test case of questions") -- not getting
-                                             Just a  -> testLoop (qio a) home 1 >>= \x -> return (200, x, "accept test")
+                                             Just a  -> testLoop (qio a) home lang 1 >>= \x -> return (200, x, "accept test")
   return (contests, createResAtSubmit resint resmsg result)
  _  -> return (contests, createResAtStatus 400 "set question name and file name") -- nothing question
  where

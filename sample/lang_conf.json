@@ -1,0 +1,18 @@
+{
+	"language": [ 
+		{
+			"name": "haskell",
+			"extention": ["hs"],
+			"docker_image": "atsubmit_hs",
+			"main_file": "Main.hs",
+			"langid": "3014" 
+		},
+		{
+			"name": "rust",
+			"extention": ["rs"],
+			"docker_image": "atsubmit_rs",
+			"main_file": "Main.rs",
+			"langid": "3504"
+		}
+	]
+}

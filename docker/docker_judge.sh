@@ -2,7 +2,8 @@
 
 dir=~/.cache/atsubmit
 
-main=Main.hs
+img=${1}
+main=${2}
 src=${dir}/src/source.txt
 input=${dir}/src/input.txt
 output=${dir}/src/output.txt
@@ -10,9 +11,8 @@ out=${dir}/src/outres.txt
 comp=${dir}/src/comp.txt
 timer=2
 
-img=atjudge_hs
-
 # dockerの操作
+echo ${img} ${main}
 t=$(date +%Y%m%d%H%M%S)
 docker create --name ${t} --pids-limit 10 --network "none" ${img} >/dev/null 2>&1
 docker cp ${src} ${t}:/home/${main} >/dev/null 2>&1
