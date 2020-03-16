@@ -27,7 +27,6 @@ import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
 import qualified Data.Aeson as DA
 
-dockershell = "/.local/lib/atsubmit/docker_judge.sh"
 langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
 ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
@@ -41,6 +40,7 @@ data Question = Question { qurl :: T.Text -- question page's url
 data Contest = Contest { questions :: V.Vector Question 
                        , cookie :: [BSC.ByteString]
                        , csrf_token :: T.Text
+                       , homedir :: T.Text
                        } deriving (Show, Eq)
 
 data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- raw command
@@ -103,20 +103,19 @@ instance DA.FromJSON LangJson where
 
 instance DA.ToJSON LangJson where
  toJSON (LangJson n e d m l) = DA.object [ "name" DA..= n
-                                          , "extention" DA..= e
-                                          , "docker_image" DA..= d
-                                          , "main_file" DA..= m
-                                          , "langid" DA..= l]
+                                         , "extention" DA..= e
+                                         , "docker_image" DA..= d
+                                         , "main_file" DA..= m
+                                         , "langid" DA..= l]
 
-
-nullContest = Contest { questions = [], cookie = [], csrf_token = ""}
+nullContest = Contest { questions = [], cookie = [], csrf_token = "", homedir = ""}
 nullQuestion = Question { qurl = "", qio = []}
 nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing, userdir = ""}
 nullResAtSubmit = ResAtSubmit { resstatus = 100, resmsg = "nothing", resresult = []}
 nullLangJson = LangJson { name = "", extention = [], docker_image = "", main_file = "", langid = ""}
 
-createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> Contest
-createContest q c t = Contest { questions = q, cookie = c, csrf_token = t}
+createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> IO Contest
+createContest q c t = getHomeDirectory >>= \d -> return Contest { questions = q, cookie = c, csrf_token = t, homedir = T.pack d}
 
 createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
 createQuestion url io = Question { qurl = url, qio = io}
@@ -189,11 +188,9 @@ getCookieAndCsrfToken un pw = do
  let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
  let fstcke = getResponseHeader hSetCookie fstres
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
- return $ if (checkFailLogin.getResponseBody) responce
-          then (createContest V.empty [] []
-               , createResAtStatus 403 "fail login.")
-          else (createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn
-               , createResAtStatus 200 "accpet login")
+ if (checkFailLogin.getResponseBody) responce
+  then createContest V.empty [] [] >>= \x -> return (x, createResAtStatus 403 "fail login.")
+  else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn >>= \x -> return (x, createResAtStatus 200 "accpet login")
  where
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
@@ -268,10 +265,9 @@ getContestResult cnt ud = if T.null cnt then return [] else do
    zipLines [s] [c] [r] = [[s, c, r]]
    zipLines (s:t) (c:n) (r:e) = [s, c, r]:zipLines t n e
 
-languageSelect :: T.Text -> IO (LangJson)-- name, extention, docker_image, main_file, langid
-languageSelect fp = do
- home <- getHomeDirectory 
- json <- BSL.fromStrict <$> BS.readFile (home ++ langJson)
+languageSelect :: T.Text -> T.Text -> IO (LangJson)-- name, extention, docker_image, main_file, langid
+languageSelect home fp = do
+ json <- BSL.fromStrict <$> (BS.readFile.T.unpack.T.append home) langJson
  case DA.decode json :: Maybe LJBase of
   Nothing -> return nullLangJson
   Just lists -> do
@@ -287,7 +283,7 @@ postSubmit :: ReqAtSubmit -> Contest -> IO ResAtSubmit
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
   source <- TIO.readFile $ T.unpack $ V.foldl1 T.append [userdir msg, T.singleton '/', fm]
-  lang <- languageSelect fm
+  lang <- languageSelect (homedir ud) fm
   let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/submit"]
   res <- postRequestWrapper questurl (cookie ud) [ ("data.TaskScreenName", qm), ("data.LanguageId", langid lang)
                                                  , ("sourceCode", source), ("csrf_token", csrf_token ud)]
@@ -301,26 +297,28 @@ postLogout ud = do
   then createResAtStatus 403 (T.append "fali logout. status code :" ((T.pack.show.getResponseStatusCode) res))
   else createResAtStatus 200 "accept logout"
 
-testLoop :: V.Vector (T.Text, T.Text) -> System.IO.FilePath -> LangJson -> Int -> IO [[T.Text]]
+testLoop :: V.Vector (T.Text, T.Text) -> T.Text -> LangJson -> Int -> IO [[T.Text]]
 testLoop qs dir lang k = if V.null qs then return [] else do
- TIO.writeFile infile $ (fst.V.head) qs
- TIO.writeFile outfile $ (snd.V.head) qs
- ec <- shell (V.foldl1 T.append [T.pack dir, dockershell, " ", docker_image lang, " ", main_file lang]) empty
- outres <- TIO.readFile outfile
- comp <- TIO.readFile compfile
- (out, next) <- (\x -> case ec of
-                       ExitFailure 1 -> ([(T.pack.show) k, "CE", comp], [])
-                       ExitFailure 2 -> ([(T.pack.show) k, "RE"], x)
-                       ExitFailure _ -> ([(T.pack.show) k, "TLE"], x)
-                       ExitSuccess   -> (if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ([(T.pack.show) k, "AC"], x)
-                                         else ([(T.pack.show) k, "WA", outres, (snd.V.head) qs], x))) <$> testLoop (V.tail qs) dir lang (k+1)
+ TIO.writeFile (T.unpack infile) $ (fst.V.head) qs
+ TIO.writeFile (T.unpack outfile) $ (snd.V.head) qs
+ ec <- shell (V.foldl1 T.append [dockershell, " ", docker_image lang, " ", main_file lang]) Turtle.empty
+ outres <- TIO.readFile (T.unpack outfile)
+ comp <- TIO.readFile (T.unpack compfile)
+ (out, next) <- (
+  \x -> case ec of
+             ExitFailure 1 -> ([(T.pack.show) k, "CE", comp], [])
+             ExitFailure 2 -> ([(T.pack.show) k, "RE"], x)
+             ExitFailure _ -> ([(T.pack.show) k, "TLE"], x)
+             ExitSuccess   -> (if checkResult (T.lines outres) ((T.lines.snd.V.head) qs) then ([(T.pack.show) k, "AC"], x)
+                               else ([(T.pack.show) k, "WA", outres, (snd.V.head) qs], x))) <$> testLoop (V.tail qs) dir lang (k+1)
  return $ out:next
-  where
-   infile = dir ++ "/.cache/atsubmit/src/input.txt"
-   outfile = dir ++ "/.cache/atsubmit/src/outres.txt"
-   compfile = dir ++ "/.cache/atsubmit/src/comp.txt"
-   checkResult :: [T.Text] -> [T.Text] -> Bool
-   checkResult [] []           = True
-   checkResult ([]:es) (ans)   = checkResult es ans
-   checkResult (r:es) (a:ns)   = if r == a then checkResult es ns else False
-   checkResult _ _             = False
+ where
+  checkResult :: [T.Text] -> [T.Text] -> Bool
+  checkResult [] []           = True
+  checkResult ([]:es) (ans)   = checkResult es ans
+  checkResult (r:es) (a:ns)   = if r == a then checkResult es ns else False
+  checkResult _ _             = False
+  dockershell = T.append dir "/.local/lib/atsubmit/docker_judge.sh"
+  infile = T.append dir "/.cache/atsubmit/src/input.txt"
+  outfile = T.append dir "/.cache/atsubmit/src/outres.txt"
+  compfile = T.append dir "/.cache/atsubmit/src/comp.txt"

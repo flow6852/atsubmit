@@ -32,7 +32,8 @@ update:
 
 uninstall:
 	@rm -rf $(LOCAL_LIB_PATH) $(LOCAL_CACHE_PATH) $(LOCAL_CONF_PATH) $(LOCAL_MAN_PATH)/$(BIN_NAME).man $(LOCAL_BIN_PATH)/$(BIN_NAME)
-	@docker rmi atjudge_hs
+	@docker rmi atsubmit_hs
+	@docker rmi atsubmit_rs
 
 clean:
 	@stack clean

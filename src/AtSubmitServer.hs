@@ -24,6 +24,9 @@ import Control.Applicative
 import Control.Exception
 import qualified Data.Aeson as DA
 import qualified Data.ByteString as BS
+import Turtle
+import qualified Turtle.Shell as TS
+import qualified Control.Foldl as CF
 
 server :: Socket -> Contest -> IO (Bool, Contest)
 server sock contests = do
@@ -111,16 +114,15 @@ atResult contests msg = case cname msg of
 atTest :: AtFunc
 atTest contests msg = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
-  home <- getHomeDirectory
-  lang <- languageSelect fm
-  TIO.readFile (T.unpack (T.append (userdir msg) (T.append (T.singleton '/') fm))) >>= TIO.writeFile (home ++ mainfile)
+  lang <- languageSelect fm (homedir contests)
+  TIO.readFile (T.unpack (V.foldl1 T.append [userdir msg, "/", fm])) >>= TIO.writeFile (T.unpack mainfile)
   let mquest = V.find ((== qm).T.takeWhileEnd (/='/').qurl) $ questions contests
   (resint, result, resmsg) <- case mquest of Nothing -> return (405, [], "not get test case of questions") -- not getting
-                                             Just a  -> testLoop (qio a) home lang 1 >>= \x -> return (200, x, "accept test")
+                                             Just a  -> testLoop (qio a) (homedir contests) lang 1 >>= \x -> return (200, x, "accept test")
   return (contests, createResAtSubmit resint resmsg result)
  _  -> return (contests, createResAtStatus 400 "set question name and file name") -- nothing question
  where
-  mainfile = "/.cache/atsubmit/src/source.txt"
+  mainfile = T.append (homedir contests) "/.cache/atsubmit/src/source.txt"
 
 atLogout :: AtFunc
 atLogout contests msg = postLogout contests >>= \x -> return (nullContest, x)
