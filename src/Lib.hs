@@ -26,12 +26,13 @@ import System.Directory
 import qualified Turtle.Shell as TS
 import qualified Control.Foldl as CF
 import qualified Data.Aeson as DA
+import Control.Monad.Trans.Except
 
 langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
 ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
-type AtFunc = Contest -> ReqAtSubmit -> IO (Contest, ResAtSubmit)
+type AtFunc = Contest -> ReqAtSubmit -> IO (Either (Int, T.Text) (Contest, ResAtSubmit))
 
 data Question = Question { qurl :: T.Text -- question page's url
                          , qio :: V.Vector (T.Text, T.Text) -- input, output
@@ -49,6 +50,8 @@ data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- raw command
                                , qname :: Maybe T.Text -- question name (ex abc_a
                                , file :: Maybe T.Text
                                , userdir :: T.Text
+                               , password :: Maybe T.Text -- only use login
+                               , username :: Maybe T.Text -- only use login
                                } deriving (Show, Eq)
 
 data ResAtSubmit = ResAtSubmit { resstatus :: Int    -- responce status 
@@ -72,14 +75,18 @@ instance DA.FromJSON ReqAtSubmit where
                                        <*> (v DA..:? "qname")
                                        <*> (v DA..:? "file")
                                        <*> (v DA..: "userdir")
+                                       <*> (v DA..: "username")
+                                       <*> (v DA..: "password")
 
 instance DA.ToJSON ReqAtSubmit where
- toJSON (ReqAtSubmit rc sc cn qn f u ) = DA.object [ "rcom" DA..= rc
-                                                   , "subcmd" DA..= sc
-                                                   , "cname" DA..= cn
-                                                   , "qname" DA..= qn
-                                                   , "file" DA..= f
-                                                   , "userdir" DA..= u]
+ toJSON (ReqAtSubmit rc sc cn qn f u un ps) = DA.object [ "rcom" DA..= rc
+                                                        , "subcmd" DA..= sc
+                                                        , "cname" DA..= cn
+                                                        , "qname" DA..= qn
+                                                        , "file" DA..= f
+                                                        , "userdir" DA..= u
+                                                        , "username" DA..= un 
+                                                        , "password" DA..= ps]
 
 instance DA.FromJSON ResAtSubmit where
  parseJSON (DA.Object v) = ResAtSubmit <$> (v DA..: "resstatus")
@@ -110,7 +117,8 @@ instance DA.ToJSON LangJson where
 
 nullContest = Contest { questions = [], cookie = [], csrf_token = "", homedir = ""}
 nullQuestion = Question { qurl = "", qio = []}
-nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing, userdir = ""}
+nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing
+                              , userdir = "", username = Nothing, password = Nothing}
 nullResAtSubmit = ResAtSubmit { resstatus = 100, resmsg = "nothing", resresult = []}
 nullLangJson = LangJson { name = "", extention = [], docker_image = "", main_file = "", langid = ""}
 
@@ -121,7 +129,7 @@ createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
 createQuestion url io = Question { qurl = url, qio = io}
 
 createReqAtSubmit :: [T.Text] -> T.Text -> ReqAtSubmit
-createReqAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r, userdir = u}
+createReqAtSubmit r u = (listAtSubmit r) { rcom = T.unwords r, userdir = u, username = Nothing, password = Nothing}
  where
   listAtSubmit :: [T.Text] -> ReqAtSubmit
   listAtSubmit l = case Prelude.length l of
@@ -182,44 +190,45 @@ postRequestWrapper url cke body = do
  mng <- newManager tlsManagerSettings
  Network.HTTP.Conduit.httpLbs postReq mng
 
-getCookieAndCsrfToken :: T.Text -> T.Text -> IO (Contest, ResAtSubmit)
+getCookieAndCsrfToken :: T.Text -> T.Text -> IO (Either (Int, T.Text) (Contest, ResAtSubmit))
 getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
  let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
  let fstcke = getResponseHeader hSetCookie fstres
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
  if (checkFailLogin.getResponseBody) responce
-  then createContest V.empty [] [] >>= \x -> return (x, createResAtStatus 403 "fail login.")
-  else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn >>= \x -> return (x, createResAtStatus 200 "accpet login")
+  then createContest V.empty [] [] >>= \x -> return $ Left (403, "fail login.")
+  else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn >>= 
+       \x -> return $ Right (x, createResAtStatus 200 "accpet login")
  where
   getCsrfToken :: T.Text -> T.Text
   getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
   checkFailLogin :: BSL.ByteString -> Bool
   checkFailLogin = Prelude.null.($// attributeIs "class" "alert alert-success alert-dismissible col-sm-12 fade in").fromDocument.parseLBS
 
-getContestInfo :: ReqAtSubmit -> Contest -> IO (V.Vector T.Text, ResAtSubmit) -- (question name, Responce)
+getContestInfo :: ReqAtSubmit -> Contest -> IO (Either (Int, T.Text) (V.Vector T.Text, ResAtSubmit)) -- (question name, Responce)
 getContestInfo msg ud = case (cname msg, qname msg) of
  (Just cm, Nothing) -> let contesturl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks"] in do
   res <- getRequestWrapper contesturl (cookie ud)
-  if getResponseStatus res /= status200 then return ([], createResAtStatus 404 "tasks not found.")
+  if getResponseStatus res /= status200 then return $ Left (404, "tasks not found.")
   else let base = (fromDocument.parseLBS.getResponseBody) res in 
-   return ((V.fromList.quests) base, createResAtStatus 200 "end")
+   return $ Right ((V.fromList.quests) base, createResAtStatus 200 "end")
  where
   quests :: Cursor -> [T.Text]
   quests = (Prelude.map (T.takeWhileEnd (/='/')).Prelude.concatMap (attribute "href").
            ($// attributeIs "class" "text-center no-break" &// element "a"))
 
-getPageInfo :: ReqAtSubmit -> Contest -> IO (Question, ResAtSubmit)
+getPageInfo :: ReqAtSubmit -> Contest -> IO (Either (Int, T.Text) (Question, ResAtSubmit))
 getPageInfo msg ud = case (cname msg, qname msg) of
  (Just cm, Just qm) -> let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/tasks/", qm] in
-  if V.elem questurl ((V.map qurl.questions) ud) then return (nullQuestion, createResAtStatus 405 "already get.") else do
+  if V.elem questurl ((V.map qurl.questions) ud) then return (Left (405, "already get.")) else do
    res <- getRequestWrapper questurl (cookie ud)
-   if getResponseStatus res /= status200 then return (nullQuestion, createResAtStatus 404 "question not found.")
+   if getResponseStatus res /= status200 then return $  Left (404, "question not found.")
    else let fname = T.unpack (V.foldl1 T.append [userdir msg, "/", qm, ".html"]) in
-    TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (
+    TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res) >> return (Right (
      createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
-     , createResAtSubmit 200 "get html and test case." [[qm]])
- _ -> return (nullQuestion, createResAtStatus 400 "set contest name and question name")
+     , createResAtSubmit 200 "get html and test case." [[qm]]))
+ _ -> return $ Left (400, "set contest name and question name")
  where 
   questionIO :: Cursor -> V.Vector (T.Text, T.Text)
   questionIO cursor = do
@@ -279,7 +288,7 @@ languageSelect home fp = do
   getExtention :: T.Text -> T.Text
   getExtention = T.takeWhileEnd (\x -> x/='.')
 
-postSubmit :: ReqAtSubmit -> Contest -> IO ResAtSubmit
+postSubmit :: ReqAtSubmit -> Contest -> IO (Either (Int, T.Text) ResAtSubmit)
 postSubmit msg ud = case (cname msg, qname msg, file msg) of
  (Just cm, Just qm, Just fm) -> do
   source <- TIO.readFile $ T.unpack $ V.foldl1 T.append [userdir msg, T.singleton '/', fm]
@@ -287,15 +296,15 @@ postSubmit msg ud = case (cname msg, qname msg, file msg) of
   let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cm, "/submit"]
   res <- postRequestWrapper questurl (cookie ud) [ ("data.TaskScreenName", qm), ("data.LanguageId", langid lang)
                                                  , ("sourceCode", source), ("csrf_token", csrf_token ud)]
-  return $ createResAtStatus 200 "submit."
- _ -> return $ createResAtStatus 400 "set contest name, question name and file name for submit."
+  return $ Right $ createResAtStatus 200 "submit."
+ _ -> return $ Left (400, "set contest name, question name and file name for submit.")
  
-postLogout :: Contest -> IO ResAtSubmit
+postLogout :: Contest -> IO (Either (Int, T.Text) ResAtSubmit)
 postLogout ud = do
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie ud) [("csrf_token", csrf_token ud)]
- return $ if getResponseStatus res /= status200 
-  then createResAtStatus 403 (T.append "fali logout. status code :" ((T.pack.show.getResponseStatusCode) res))
-  else createResAtStatus 200 "accept logout"
+ if getResponseStatus res /= status200 
+  then return $ Left (403, (T.append "fali logout. status code :" ((T.pack.show.getResponseStatusCode) res)))
+  else return $ Right $ createResAtStatus 200 "accept logout"
 
 testLoop :: V.Vector (T.Text, T.Text) -> T.Text -> LangJson -> Int -> IO [[T.Text]]
 testLoop qs dir lang k = if V.null qs then return [] else do

@@ -3,14 +3,14 @@
 		{
 			"name": "haskell",
 			"extention": ["hs"],
-			"docker_image": "atsubmit_hs",
+			"docker_image": "atsubmit.hs",
 			"main_file": "Main.hs",
 			"langid": "3014" 
 		},
 		{
 			"name": "rust",
 			"extention": ["rs"],
-			"docker_image": "atsubmit_rs",
+			"docker_image": "atsubmit.rs",
 			"main_file": "Main.rs",
 			"langid": "3504"
 		}

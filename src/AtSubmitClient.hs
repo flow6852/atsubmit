@@ -28,9 +28,13 @@ import qualified Data.Aeson as DA
 client :: [T.Text] -> Socket -> IO()
 client msg sock = do
  cwd <- T.pack <$> getCurrentDirectory
- let req = createReqAtSubmit msg cwd
+ let request = (createReqAtSubmit msg cwd) 
+ req <- case subcmd request of 
+             "login" ->  (\[user, pass] -> request {username = Just (T.pack user), password = Just (T.pack pass)}) <$> getAtKeys
+             _       ->  return request
  sendMsg sock ((toStrict.DA.encode) req) 1024
  json <- fromStrict <$> recvMsg sock 1024
+ print json
  TIO.putStrLn (case DA.decode json :: Maybe ResAtSubmit of
   Nothing -> "responce : json parse error"
   Just x  -> case (subcmd req, resstatus x) of

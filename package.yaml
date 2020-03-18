@@ -37,6 +37,7 @@ library:
           - turtle
           - foldl
           - aeson
+          - transformers
 
 executables:
   atsubmit-exe:
