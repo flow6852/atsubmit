@@ -2,9 +2,9 @@
 module Main where
 
 import Lib
-import UnixDomainSocket
-import AtSubmitServer
-import AtSubmitClient
+import Server
+import Server.Login
+import Client
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -12,7 +12,6 @@ import qualified Data.Vector as V
 import System.Environment
 import System.IO
 import System.Posix.Daemonize
-import Control.Exception
 
 sockpath = "/.local/lib/atsubmit/atsubmit.sock"
 

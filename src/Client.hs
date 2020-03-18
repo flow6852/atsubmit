@@ -2,28 +2,27 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE BangPatterns #-}
 
-module AtSubmitClient where
+module Client where
 
 import Lib
-import UnixDomainSocket
 
-import Data.Text.Encoding
-import Data.ByteString.Lazy.Internal
-import qualified Network.Socket.ByteString as NSBS
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Network.Socket
-import qualified Data.ByteString.Char8 as BSC
 import Data.ByteString.Lazy
-import qualified Data.ByteString as BS
-import Control.Monad
 import qualified Data.Vector as V
-import qualified Text.XML.Cursor as TXC
-import qualified Text.HTML.DOM as THD
 import System.Directory
-import Control.Applicative
-import Control.Exception
+import Control.Exception as E
 import qualified Data.Aeson as DA
+
+sendServer :: FilePath -> (Socket -> IO()) -> IO()
+sendServer path client = withSocketsDo $ E.bracket (open path) close client
+ where
+  open :: FilePath -> IO Socket
+  open path = do
+   s <- socket AF_UNIX Stream 0
+   connect s (SockAddrUnix path)
+   return s
 
 client :: [T.Text] -> Socket -> IO()
 client msg sock = do
