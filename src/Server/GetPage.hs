@@ -73,3 +73,4 @@ getPageInfo msg ud = case (cname msg, qname msg) of
   chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
   rewriteHtml :: T.Text -> T.Text
   rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn"
+  ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 

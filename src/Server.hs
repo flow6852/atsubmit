@@ -58,7 +58,7 @@ server sock contests = do
                             "get"    -> (atGetPage, False)
                             "show"   -> (atShowPage, False)
                             "submit" -> (atSubmit, False)
-                            "test"   -> (atTest, False)
+                            "test"   -> (atTest sock, False)
                             "login"  -> (atLogin, False)
                             "result" -> (atResult, False)
                             "help"   -> (atHelp, False)
@@ -66,6 +66,7 @@ server sock contests = do
    (retc, res) <- (\result -> case result of Left  (ei, em) -> (contests, createResAtStatus ei (T.append "server error : " em))
                                              Right y        -> y) <$> func contests x
    sendMsg sock ((toStrict.DA.encode) res) 1024
+   print res
    return (retb, retc)
  where
   notDo :: AtFunc

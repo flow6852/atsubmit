@@ -3,15 +3,21 @@
 		{
 			"name": "haskell",
 			"extention": ["hs"],
-			"docker_image": "atsubmit.hs",
+			"is_docker": true,
+			"docker_image": "atsubmit_hs",
 			"main_file": "Main.hs",
+			"compile": "stack ghc -o ./a.out -O2 ./Main.hs",
+			"exec": "./a.out",
 			"langid": "3014" 
 		},
 		{
 			"name": "rust",
 			"extention": ["rs"],
-			"docker_image": "atsubmit.rs",
+			"is_docker": true,
+			"docker_image": "atsubmit_rs",
 			"main_file": "Main.rs",
+			"compile": "rustc -O -o ./a.out ./Main.rs",
+			"exec": "./a.out",
 			"langid": "3504"
 		}
 	]

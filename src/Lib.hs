@@ -32,8 +32,6 @@ instance DA.FromJSON Sizes where
 
 langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
-ajax :: T.Text
-ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
 type AtFunc = Contest -> ReqAtSubmit -> IO (Either (Int, T.Text) (Contest, ResAtSubmit))
 
@@ -64,10 +62,14 @@ data ResAtSubmit = ResAtSubmit { resstatus :: Int    -- responce status
 
 data LangJson = LangJson { name :: T.Text
                          , extention :: V.Vector T.Text
-                         , docker_image :: T.Text
-                         , main_file :: T.Text
+                         , is_docker :: Bool
+                         , docker_image :: Maybe T.Text
+                         , main_file :: Maybe T.Text
+                         , compile :: Maybe T.Text
+                         , exec :: Maybe T.Text
                          , langid :: T.Text
                          } deriving (Show, Eq)
+
 
 data LJBase = LJBase { language :: V.Vector LangJson } deriving (Show, Eq)
 
@@ -78,8 +80,8 @@ instance DA.FromJSON ReqAtSubmit where
                                        <*> (v DA..:? "qname")
                                        <*> (v DA..:? "file")
                                        <*> (v DA..: "userdir")
-                                       <*> (v DA..: "username")
-                                       <*> (v DA..: "password")
+                                       <*> (v DA..:? "username")
+                                       <*> (v DA..:? "password")
 
 instance DA.ToJSON ReqAtSubmit where
  toJSON (ReqAtSubmit rc sc cn qn f u un ps) = DA.object [ "rcom" DA..= rc
@@ -107,23 +109,32 @@ instance DA.ToJSON LJBase where toJSON (LJBase l) = DA.object [ "language" DA..=
 instance DA.FromJSON LangJson where
  parseJSON (DA.Object v) = LangJson <$> (v DA..: "name")
                                     <*> (v DA..: "extention")
-                                    <*> (v DA..: "docker_image")
-                                    <*> (v DA..: "main_file")
+                                    <*> (v DA..: "is_docker")
+                                    <*> (v DA..:? "docker_image")
+                                    <*> (v DA..:? "main_file")
+                                    <*> (v DA..:? "compile")
+                                    <*> (v DA..:? "exec")
                                     <*> (v DA..: "langid")
 
 instance DA.ToJSON LangJson where
- toJSON (LangJson n e d m l) = DA.object [ "name" DA..= n
-                                         , "extention" DA..= e
-                                         , "docker_image" DA..= d
-                                         , "main_file" DA..= m
-                                         , "langid" DA..= l]
+ toJSON (LangJson n e id di mf c ex l) = DA.object [ "name" DA..= n
+                                                   , "extention" DA..= e
+                                                   , "is_docker" DA..= id
+                                                   , "docker_image" DA..= di
+                                                   , "main_file" DA..= mf
+                                                   , "compile" DA..= c 
+                                                   , "exec" DA..= c 
+                                                   , "langid" DA..= l]
+
+
 
 nullContest = Contest { questions = [], cookie = [], csrf_token = "", homedir = ""}
 nullQuestion = Question { qurl = "", qio = []}
 nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing
                               , userdir = "", username = Nothing, password = Nothing}
 nullResAtSubmit = ResAtSubmit { resstatus = 100, resmsg = "nothing", resresult = []}
-nullLangJson = LangJson { name = "", extention = [], docker_image = "", main_file = "", langid = ""}
+nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_image = Nothing, main_file = Nothing
+                        , compile = Nothing, exec = Nothing, langid = ""}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> IO Contest
 createContest q c t = getHomeDirectory >>= \d -> return Contest { questions = q, cookie = c, csrf_token = t, homedir = T.pack d}
@@ -175,15 +186,16 @@ recvMsg sock n = do
  json <- fromStrict <$> NSBS.recv sock n
  case DA.decode json of
   Just size -> do
-    NSBS.send sock $ toStrict.DA.encode $ size {socksize = min (socksize size) n} -- deside receive size
-    rcv <- recvLoop sock (min (socksize size) n) 0
-    return $ (Prelude.foldl1 S.append) rcv where
-                                            recvLoop :: Socket -> Int -> Int -> IO [S.ByteString]
-                                            recvLoop s k i = do
-                                             msg <- NSBS.recv s k
-                                             if (S.length msg) + i == (datasize size) then return [msg]
-                                             else if (S.length msg) + i > (datasize size) then return [msg]
-                                             else  recvLoop s k ((S.length msg) + i) >>= \next -> return (msg:next)
+   NSBS.send sock $ toStrict.DA.encode $ size {socksize = min (socksize size) n} -- deside receive size
+   rcv <- recvLoop (min (socksize size) n) 0
+   return $ (S.take (datasize size).Prelude.foldl1 S.append) rcv
+    where
+     recvLoop :: Int -> Int -> IO [S.ByteString]
+     recvLoop k i = do
+      msg <- NSBS.recv sock k
+      if (S.length msg) + i == (datasize size) then NSBS.send sock (toStrict "end") >> return [msg]
+      else if (S.length msg) + i > (datasize size) then NSBS.send sock (toStrict "end") >> return [msg]
+      else recvLoop k ((S.length msg) + i) >>= \next -> return (msg:next)
   _         -> return S.empty
  
 sendMsg :: Socket -> S.ByteString -> Int -> IO ()
@@ -191,13 +203,14 @@ sendMsg sock msg n = do
  NSBS.send sock $ toStrict.DA.encode $ Sizes {socksize = n, datasize = S.length msg}
  json <- fromStrict <$> NSBS.recv sock n -- deside send size
  case DA.decode json of
-  Just size -> sendLoop sock (takeNList (socksize size) msg)
-  _         -> return ()
+      Just size -> sendLoop (takeNList (socksize size) msg)
+      _         -> return ()
  where
-  sendLoop :: Socket -> [S.ByteString] -> IO()
-  sendLoop s m = do 
-   NSBS.send s $ Prelude.head m
-   if Prelude.length m == 1 then return () else  sendLoop s (Prelude.tail m)
+  sendLoop :: [S.ByteString] -> IO()
+  sendLoop m = do 
+   NSBS.send sock $ Prelude.head m
+   if Prelude.length m == 1 then NSBS.recv sock n >> return ()
+   else sendLoop (Prelude.tail m)
 
 rmDup :: V.Vector T.Text -> V.Vector T.Text
 rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty

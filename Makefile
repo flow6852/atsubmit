@@ -8,6 +8,8 @@ LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 .PHONY: build install clean test foruser
 build :
 	@stack build
+	@sudo install $(shell stack exec which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
+	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 test:
 	@stack test
 
