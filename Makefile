@@ -11,7 +11,8 @@ build :
 	@sudo install $(shell stack exec which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 test:
-	@stack test
+	@stack test --no-run-tests
+	@sudo install $(shell find . -name $(BIN_NAME)-test -executable -type f) $(LOCAL_BIN_PATH)/$(BIN_NAME)-test
 
 install:
 	@stack build
@@ -36,6 +37,9 @@ uninstall:
 	@rm -rf $(LOCAL_LIB_PATH) $(LOCAL_CACHE_PATH) $(LOCAL_CONF_PATH) $(LOCAL_MAN_PATH)/$(BIN_NAME).man $(LOCAL_BIN_PATH)/$(BIN_NAME)
 	@docker rmi atsubmit_hs
 	@docker rmi atsubmit_rs
+
+test-clean:
+	@rm $(LOCAL_BIN_PATH)/$(BIN_NAME)-test
 
 clean:
 	@stack clean

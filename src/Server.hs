@@ -65,8 +65,8 @@ server sock contests = do
                             _        -> (notDo, False)
    (retc, res) <- (\result -> case result of Left  (ei, em) -> (contests, createResAtStatus ei (T.append "server error : " em))
                                              Right y        -> y) <$> func contests x
-   sendMsg sock ((toStrict.DA.encode) res) 1024
    print res
+   sendMsg sock ((toStrict.DA.encode) res) 1024
    return (retb, retc)
  where
   notDo :: AtFunc

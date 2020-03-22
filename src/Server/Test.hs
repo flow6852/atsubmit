@@ -67,6 +67,7 @@ atTest sock contests msg = case (cname msg, qname msg, file msg) of
     shell "docker rm -f atsubmit_run" Turtle.empty
     case (ec,timecheck) of
      (ExitSuccess, Just "0") -> return $ Just 0
+     (ExitSuccess, Just m)   -> return $ Just $ (read.T.unpack.lineToText) m
      (ExitFailure n, Just m) -> return $ Just $ if n == (read.T.unpack.lineToText) m then n else (read.T.unpack.lineToText) m 
    useDockerTest _ _ = return Nothing 
    unUseDocker :: Maybe T.Text -> Maybe T.Text -> Maybe T.Text -> IO (Maybe Int)
@@ -81,5 +82,5 @@ atTest sock contests msg = case (cname msg, qname msg, file msg) of
        ExitFailure 124 -> return $ Just 124
        ExitFailure n   -> return $ Just 2
        ExitSuccess     -> return $ Just 0
-   unUseDocker _ _ _ = return Nothing
+   unUseDocker _ _ _ = return Nothing 
  _  -> return $ Left (400, "set question name and file name") -- nothing question
