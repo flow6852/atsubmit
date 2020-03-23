@@ -17,6 +17,7 @@ sockpath = "/.local/lib/atsubmit/atsubmit.sock"
 main :: IO ()
 main = do
  arg <- Prelude.map T.pack <$> getArgs
+ print arg
  if null arg then getAtKeys >>= 
   \[user, pass] -> atLogin nullContest (nullReqAtSubmit{username = Just (T.pack user), password = Just (T.pack pass)}) >>= 
   \result -> case result of 

@@ -46,7 +46,7 @@ atTest sock contests msg = case (cname msg, qname msg, file msg) of
                      Just 1  -> ([[(T.pack.show) k, "CE", comp]], "last")
                      Just 2  -> ([[(T.pack.show) k, "RE"]], rmsg)
                      Just _  -> ([[(T.pack.show) k, "TLE"]], rmsg)
-                     Nothing -> ([[(T.pack.show) k, "Nothing"]], rmsg)
+                     Nothing -> ([[(T.pack.show) k, "Nothing"]], "last")
     sendMsg sock ((toStrict.encode.createResAtSubmit 200 rm) out) 1024
     if "last" /= rm then testLoop (V.tail qs) func main (k+1) else return (200, "accepted test")
    checkResult :: [T.Text] -> [T.Text] -> Bool
@@ -83,4 +83,6 @@ atTest sock contests msg = case (cname msg, qname msg, file msg) of
        ExitFailure n   -> return $ Just 2
        ExitSuccess     -> return $ Just 0
    unUseDocker _ _ _ = return Nothing 
- _  -> return $ Left (400, "set question name and file name") -- nothing question
+ _  -> do
+  sendMsg sock ((toStrict.encode.createResAtStatus 400) "last") 1024
+  return $ Left (400, "set question name and file name") -- nothing question

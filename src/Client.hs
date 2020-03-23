@@ -41,7 +41,7 @@ client msg sock = do
     ("get", 200)    -> (TIO.putStrLn.T.intercalate "\n".Prelude.concat.resresult) x
     ("show", 200)   -> TIO.putStrLn.T.intercalate "\n".(if qname req == Nothing then Prelude.head else atShowRes).resresult $ x
     ("submit", 200) -> (TIO.putStrLn.resmsg) x
-    ("test", 200)   -> testShow sock (Just x)
+    ("test", _)     -> testShow sock (Just x)
     ("login", 200)  -> (TIO.putStrLn.resmsg) x
     ("result", 200) -> (TIO.putStrLn.T.intercalate "\n".Prelude.map (T.intercalate " : ").resresult) x
     ("help", 200)   -> (TIO.putStrLn.Prelude.head.Prelude.head.resresult) x
