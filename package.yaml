@@ -38,6 +38,7 @@ library:
           - foldl
           - aeson
           - transformers
+          - uri-encode
 
 executables:
   atsubmit-exe:
@@ -52,6 +53,9 @@ executables:
     - text
     - vector
     - hdaemonize
+    - bytestring
+    - directory
+    - uri-encode
 
 tests:
   atsubmit-test:
@@ -67,3 +71,4 @@ tests:
     - vector
     - hdaemonize
     - directory
+    - bytestring

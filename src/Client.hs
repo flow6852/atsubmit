@@ -14,6 +14,7 @@ import qualified Data.Vector as V
 import System.Directory
 import Control.Exception as E
 import qualified Data.Aeson as DA
+import System.Exit
 
 sendServer :: FilePath -> (Socket -> IO()) -> IO()
 sendServer path client = withSocketsDo $ E.bracket (open path) close client
@@ -29,8 +30,8 @@ client msg sock = do
  cwd <- T.pack <$> getCurrentDirectory
  let request = (createReqAtSubmit msg cwd) 
  req <- case subcmd request of 
-             "login" ->  (\[user, pass] -> request {username = Just (T.pack user), password = Just (T.pack pass)}) <$> getAtKeys
-             _       ->  return request
+             "login" -> (\[user, pass] -> request {username = Just (T.pack user), password = Just (T.pack pass)}) <$> getAtKeys
+             _       -> return request
  sendMsg sock ((toStrict.DA.encode) req) 1024
  json <- fromStrict <$> recvMsg sock 1024
  case DA.decode json :: Maybe ResAtSubmit of
@@ -42,14 +43,18 @@ client msg sock = do
     ("show", 200)   -> TIO.putStrLn.T.intercalate "\n".(if qname req == Nothing then Prelude.head else atShowRes).resresult $ x
     ("submit", 200) -> (TIO.putStrLn.resmsg) x
     ("test", _)     -> testShow sock (Just x)
+    ("debug", 200)  -> (TIO.putStrLn.debugShow.resresult) x
     ("login", 200)  -> (TIO.putStrLn.resmsg) x
     ("result", 200) -> (TIO.putStrLn.T.intercalate "\n".Prelude.map (T.intercalate " : ").resresult) x
     ("help", 200)   -> (TIO.putStrLn.Prelude.head.Prelude.head.resresult) x
-    _               -> (TIO.putStrLn.V.foldl1 T.append) [(T.pack.show.resstatus) x, " : ", resmsg x]
+    _               -> (TIO.putStrLn.V.foldl1 T.append) [(T.pack.show.resstatus) x, " : ", resmsg x] >> exitWith (ExitFailure (resstatus x))
 
 atShowRes :: [[T.Text]] -> [T.Text]
 atShowRes x = Prelude.zipWith (\a b -> V.foldl1 T.append ["======= case ",(T.pack.show) a, " =======\n", b]) [1..(Prelude.length x)]
                               (Prelude.map (\[i,o] -> T.intercalate "\n" ["===== input =====", i, "===== output =====", o]) x)
+
+debugShow :: [[T.Text]] -> T.Text
+debugShow = (\[[i,ret]] -> T.intercalate "\n" ["===== input =====", i, "===== responce =====", ret])
 
 testShow :: Socket -> Maybe ResAtSubmit -> IO ()
 testShow _ Nothing = TIO.putStrLn "json error."

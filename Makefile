@@ -5,7 +5,7 @@ LOCAL_CONF_PATH = $(HOME)/.config/$(BIN_NAME)
 LOCAL_MAN_PATH = $(HOME)/.local/share/man
 LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 
-.PHONY: build install clean test foruser
+.PHONY: build install clean test forvim
 build :
 	@stack build
 	@sudo install $(shell stack exec which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
@@ -44,3 +44,5 @@ test-clean:
 clean:
 	@stack clean
 
+forvim:
+	@cp -r asvim $(HOME)/.vim/plugged

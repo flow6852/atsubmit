@@ -11,8 +11,10 @@ import Server.Submit
 import Server.ShowPage
 import Server.Result
 import Server.Test
+import Server.Debug
 import Server.Logout
 import Server.Help
+import Server.Stop
 
 import Data.ByteString.Lazy
 import qualified Data.Text as T
@@ -54,14 +56,16 @@ server sock contests = do
   Nothing -> sendMsg sock (errMsg "server : json parse error") 1024 >> return (False, contests)
   Just x  -> do
    let (func, retb) =  case (T.unpack.subcmd) x of
-                            "stop"   -> (atLogout, True)
+                            "logout" -> (atLogout, False)
                             "get"    -> (atGetPage, False)
                             "show"   -> (atShowPage, False)
                             "submit" -> (atSubmit, False)
                             "test"   -> (atTest sock, False)
+                            "debug"  -> (atDebug, False)
                             "login"  -> (atLogin, False)
                             "result" -> (atResult, False)
                             "help"   -> (atHelp, False)
+                            "stop"   -> (atStop, True)
                             _        -> (notDo, False)
    (retc, res) <- (\result -> case result of Left  (ei, em) -> (contests, createResAtStatus ei (T.append "server error : " em))
                                              Right y        -> y) <$> func contests x
@@ -72,5 +76,3 @@ server sock contests = do
   notDo c m = return $ Left (400, "sub command undefined.")
   errMsg :: T.Text -> BS.ByteString
   errMsg = toStrict.DA.encode.createResAtStatus 405
-
-
