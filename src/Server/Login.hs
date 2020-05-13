@@ -23,7 +23,12 @@ atLogin contests msg = case (username msg, password msg) of
 getCookieAndCsrfToken :: T.Text -> T.Text -> IO (Either (Int, T.Text) (Contest, ResAtSubmit))
 getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
- let csrf_tkn = (scrapingCsrfToken.BSL.toStrict.getResponseBody) fstres
+ let csrf_tkn = (getCsrfToken.getResponseBody) fstres
+-- let csrf_tkn = (scrapingCsrfToken.BSL.toStrict.getResponseBody) fstres
+-- putStrLn "=== raw ==="
+-- print $ (BSL.toStrict.getResponseBody) fstres
+-- putStrLn "=== scrf_token ==="
+--  print $ (scrapingCsrfToken.BSL.toStrict.getResponseBody) fstres
  let fstcke = getResponseHeader hSetCookie fstres
  responce <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", un), ("password", pw), ("csrf_token", csrf_tkn)]
  if (checkFailLogin.getResponseBody) responce
@@ -31,7 +36,5 @@ getCookieAndCsrfToken un pw = do
   else createContest V.empty (getResponseHeader hSetCookie responce) csrf_tkn >>= 
        \x -> return $ Right (x, createResAtStatus 200 "accpet login")
  where
-  getCsrfToken :: T.Text -> T.Text
-  getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
   checkFailLogin :: BSL.ByteString -> Bool
   checkFailLogin = Prelude.null.($// attributeIs "class" "alert alert-success alert-dismissible col-sm-12 fade in").fromDocument.parseLBS

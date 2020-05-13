@@ -270,6 +270,9 @@ scrapingCsrfToken = decodeUtf8.(\x -> case x of
  Nothing -> ""
  Just a -> BSC.drop 11 a).L.find (\x -> BSC.pack "csrf_token"==(BSC.take 10 x)).BSC.split '\NUL'.NUE.decodeByteString
 
+getCsrfToken :: T.Text -> T.Text
+getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
+
 languageSelect :: T.Text -> T.Text -> IO (LangJson)-- name, extention, docker_image, langid
 languageSelect home fp = do
  json <- BSL.fromStrict <$> (BS.readFile.T.unpack.T.append home) langJson
