@@ -1,22 +1,73 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs #-}
 
 module Client where
 
 import Lib
+import Types
 
+import Data.ByteString.Lazy
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Network.Socket
-import Data.ByteString.Lazy
-import qualified Data.Vector as V
-import System.Directory
-import Control.Exception as E
+import Data.Text.Encoding
 import qualified Data.Aeson as DA
-import System.Exit
+import qualified Data.ByteString as BS
+import qualified Data.Vector as V
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Char8 as BSC
+import Text.HTML.DOM
+import Text.XML.Cursor
+import Control.Monad
+import Control.Applicative
+import Control.Exception
+import qualified Control.Foldl as CF
+import qualified Control.Exception as E
+import Control.Concurrent.MVar
+import Control.Monad.IO.Class
+import System.Directory
+import Network.HTTP.Simple
+import Network.HTTP.Types.Status
+import Network.Socket
+import Network.HTTP.Types.Header
 
-sendServer :: FilePath -> (Socket -> IO()) -> IO()
+
+login :: FilePath -> T.Text -> T.Text -> IO ()
+login path user pass = sendServer path $ evalSHelper $ Login (Username user) (Password pass)
+
+qget :: FilePath -> T.Text -> FilePath -> IO QName
+qget path qn wd = sendServer path $ evalSHelper $ QGet (QName qn) (Userdir wd)
+
+cget :: FilePath -> T.Text -> FilePath -> IO (V.Vector QName)
+cget path cn wd = sendServer path $ evalSHelper $ CGet (CName cn) (Userdir wd)
+
+test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
+test path fn qn wd = sendServer path $ \x ->  evalSHelper (Test x (Source (wd ++ fn)) (QName qn)) x
+
+show :: FilePath -> T.Text -> IO QIO
+show path qn = sendServer path $ evalSHelper $ Show (QName qn)
+
+print :: FilePath -> IO (V.Vector QName)
+print path = sendServer path $ evalSHelper $ Print
+
+submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
+submit path fn qn wd = sendServer path $ evalSHelper $ Submit (Source (wd ++ fn)) (QName qn)
+
+debug :: FilePath -> FilePath -> FilePath -> FilePath -> IO DebugBodyRes
+debug path src din wd = sendServer path $ evalSHelper $ Types.Debug (Source (wd ++ src)) (DIn (wd ++ din))
+
+result :: FilePath -> T.Text -> IO CResult
+result path cn = sendServer path $ evalSHelper $ Result (CName cn)
+
+stop :: FilePath -> IO ()
+stop path = sendServer path $ evalSHelper Stop
+
+logout :: FilePath -> IO()
+logout path = sendServer path $ evalSHelper Logout
+
+sendServer :: FilePath -> (Socket -> IO a) -> IO a
 sendServer path client = withSocketsDo $ E.bracket (open path) close client
  where
   open :: FilePath -> IO Socket
@@ -25,49 +76,105 @@ sendServer path client = withSocketsDo $ E.bracket (open path) close client
    connect s (SockAddrUnix path)
    return s
 
-client :: [T.Text] -> Socket -> IO()
-client msg sock = do
- cwd <- T.pack <$> getCurrentDirectory
- let request = (createReqAtSubmit msg cwd) 
- req <- case subcmd request of 
-             "login" -> (\[user, pass] -> request {username = Just (T.pack user), password = Just (T.pack pass)}) <$> getAtKeys
-             _       -> return request
- sendMsg sock ((toStrict.DA.encode) req) 1024
- json <- fromStrict <$> recvMsg sock 1024
- case DA.decode json :: Maybe ResAtSubmit of
-  Nothing -> TIO.putStrLn "responce : json parse error"
-  Just x  ->
-   case (subcmd req, resstatus x) of
-    ("stop", 200)   -> (TIO.putStrLn.resmsg) x
-    ("get", 200)    -> (TIO.putStrLn.T.intercalate "\n".Prelude.concat.resresult) x
-    ("show", 200)   -> TIO.putStrLn.T.intercalate "\n".(if qname req == Nothing then Prelude.head else atShowRes).resresult $ x
-    ("submit", 200) -> (TIO.putStrLn.resmsg) x
-    ("test", _)     -> testShow sock (Just x)
-    ("debug", 200)  -> (TIO.putStrLn.debugShow.resresult) x
-    ("login", 200)  -> (TIO.putStrLn.resmsg) x
-    ("result", 200) -> (TIO.putStrLn.T.intercalate "\n".Prelude.map (T.intercalate " : ").resresult) x
-    ("help", 200)   -> (TIO.putStrLn.Prelude.head.Prelude.head.resresult) x
-    _               -> (TIO.putStrLn.V.foldl1 T.append) [(T.pack.show.resstatus) x, " : ", resmsg x] >> exitWith (ExitFailure (resstatus x))
+evalSHelper :: SHelper a -> Socket -> IO a
+evalSHelper (Login user pass) sock = do
+  sendMsg sock ((toStrict.DA.encode) (LoginReq user pass)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (LoginRes unit)) -> return unit
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
 
-atShowRes :: [[T.Text]] -> [T.Text]
-atShowRes x = Prelude.zipWith (\a b -> V.foldl1 T.append ["======= case ",(T.pack.show) a, " =======\n", b]) [1..(Prelude.length x)]
-                              (Prelude.map (\[i,o] -> T.intercalate "\n" ["===== input =====", i, "===== output =====", o]) x)
+evalSHelper (QGet qname udir) sock = do
+  sendMsg sock ((toStrict.DA.encode) (QGetReq qname udir)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (QGetRes qn)) -> return qn
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
 
-debugShow :: [[T.Text]] -> T.Text
-debugShow = (\[[i,ret]] -> T.intercalate "\n" ["===== input =====", i, "===== responce =====", ret])
+evalSHelper (CGet cname udir) sock = do
+  sendMsg sock ((toStrict.DA.encode) (CGetReq cname udir)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (CGetRes cn)) -> return cn
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
 
-testShow :: Socket -> Maybe ResAtSubmit -> IO ()
-testShow _ Nothing = TIO.putStrLn "json error."
-testShow sock (Just q) = do
- TIO.putStrLn.T.intercalate "\n".Prelude.map (T.intercalate "\n".resultMsg).resresult $ q
- next <- (DA.decode.fromStrict) <$> recvMsg sock 1024
- case resmsg q of "last" -> lastRecv next 
-                  _      -> testShow sock next
-  where
-   resultMsg :: [T.Text] -> [T.Text]
-   resultMsg [a,b]     = [V.foldl1 T.append ["case ", a, " : ", b]]
-   resultMsg [a,b,c]   = [V.foldl1 T.append ["case ", a, " : ", b], "===== compile message =====", c]
-   resultMsg [a,b,c,d] = [V.foldl1 T.append ["case ", a, " : ", b], "=== output ===", c, "=== test case ===", d] 
-   lastRecv :: Maybe ResAtSubmit -> IO ()
-   lastRecv Nothing   = TIO.putStrLn "last json error"
-   lastRecv (Just lj) = (TIO.putStrLn.resmsg) lj
+evalSHelper (Test _ source qname) sock = do
+  sendMsg sock ((toStrict.DA.encode) (TestReq source qname)) 1024
+  testRsvloop sock 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (TestRes unit)) -> return unit
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper (Submit source qname) sock = do
+  sendMsg sock ((toStrict.DA.encode) (SubmitReq source qname)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (SubmitRes unit)) -> return unit
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper (Types.Debug source din) sock = do
+  sendMsg sock ((toStrict.DA.encode) (DebugReq source din)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (DebugRes dbody)) -> return dbody
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper Print sock = do
+  sendMsg sock ((toStrict.DA.encode) PrintReq) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (PrintRes pr)) -> return pr
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper (Show qname) sock = do
+  sendMsg sock ((toStrict.DA.encode) (ShowReq qname)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (ShowRes qio)) -> return qio
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper (Result cname) sock = do
+  sendMsg sock ((toStrict.DA.encode) (ResultReq cname)) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (ResultRes cr)) -> return cr
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper Stop sock = do
+  sendMsg sock ((toStrict.DA.encode) StopReq) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (StopRes unit)) -> return unit
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+evalSHelper Logout sock = do
+  sendMsg sock ((toStrict.DA.encode) LogoutReq) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (LogoutRes unit)) -> return unit
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
+testRsvloop :: Socket -> Int -> IO (Maybe SHelperServerResponce)
+testRsvloop sock size = do
+ raw <- fromStrict <$> recvMsg sock size
+ case DA.decode raw of
+  Just AC -> Prelude.print "AC" >> testRsvloop sock size
+  Just (WA out ans) -> Prelude.print out >> Prelude.print ans >> testRsvloop sock size
+  Just (CE msg) -> Prelude.print msg >> testRsvloop sock size
+  Just RE -> Prelude.print "RE" >> testRsvloop sock size
+  Just TLE -> Prelude.print "TLE" >> testRsvloop sock size
+  Just IE  -> Prelude.print "IE" >> throwIO InternalError
+  _ -> case DA.decode raw of Just (SHelperOk (TestRes res)) -> return $ Just $ SHelperOk $ TestRes res
+                             _ -> throwIO JsonParseError
