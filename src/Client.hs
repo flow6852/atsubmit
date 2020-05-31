@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 
@@ -33,42 +32,8 @@ import Network.HTTP.Types.Status
 import Network.Socket
 import Network.HTTP.Types.Header
 
-
-login :: FilePath -> T.Text -> T.Text -> IO ()
-login path user pass = sendServer path $ evalSHelper $ Login (Username user) (Password pass)
-
-qget :: FilePath -> T.Text -> FilePath -> IO QName
-qget path qn wd = sendServer path $ evalSHelper $ QGet (QName qn) (Userdir wd)
-
-cget :: FilePath -> T.Text -> FilePath -> IO (V.Vector QName)
-cget path cn wd = sendServer path $ evalSHelper $ CGet (CName cn) (Userdir wd)
-
-test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
-test path fn qn wd = sendServer path $ \x ->  evalSHelper (Test x (Source (wd ++ fn)) (QName qn)) x
-
-show :: FilePath -> T.Text -> IO QIO
-show path qn = sendServer path $ evalSHelper $ Show (QName qn)
-
-print :: FilePath -> IO (V.Vector QName)
-print path = sendServer path $ evalSHelper $ Print
-
-submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
-submit path fn qn wd = sendServer path $ evalSHelper $ Submit (Source (wd ++ fn)) (QName qn)
-
-debug :: FilePath -> FilePath -> FilePath -> FilePath -> IO DebugBodyRes
-debug path src din wd = sendServer path $ evalSHelper $ Types.Debug (Source (wd ++ src)) (DIn (wd ++ din))
-
-result :: FilePath -> T.Text -> IO CResult
-result path cn = sendServer path $ evalSHelper $ Result (CName cn)
-
-stop :: FilePath -> IO ()
-stop path = sendServer path $ evalSHelper Stop
-
-logout :: FilePath -> IO()
-logout path = sendServer path $ evalSHelper Logout
-
 sendServer :: FilePath -> (Socket -> IO a) -> IO a
-sendServer path client = withSocketsDo $ E.bracket (open path) close client
+sendServer path client = withSocketsDo $ E.bracket (open path) close (\s -> client s `catch` \(e :: SHelperException) -> throwIO e)
  where
   open :: FilePath -> IO Socket
   open path = do
@@ -94,8 +59,10 @@ evalSHelper (QGet qname udir) sock = do
    _ -> throwIO Unknown
 
 evalSHelper (CGet cname udir) sock = do
+  Prelude.print ((toStrict.DA.encode) (CGetReq cname udir))
   sendMsg sock ((toStrict.DA.encode) (CGetReq cname udir)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
+  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (CGetRes cn)) -> return cn
    Just (SHelperErr e) -> throwIO e 
@@ -119,24 +86,30 @@ evalSHelper (Submit source qname) sock = do
    _ -> throwIO Unknown
 
 evalSHelper (Types.Debug source din) sock = do
+  Prelude.print ((toStrict.DA.encode) (DebugReq source din))
   sendMsg sock ((toStrict.DA.encode) (DebugReq source din)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
+  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (DebugRes dbody)) -> return dbody
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
 evalSHelper Print sock = do
+  Prelude.print ((toStrict.DA.encode) PrintReq)
   sendMsg sock ((toStrict.DA.encode) PrintReq) 1024
   raw <- fromStrict <$> recvMsg sock 1024
+  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (PrintRes pr)) -> return pr
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
 evalSHelper (Show qname) sock = do
+  Prelude.print ((toStrict.DA.encode) (ShowReq qname))
   sendMsg sock ((toStrict.DA.encode) (ShowReq qname)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
+  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (ShowRes qio)) -> return qio
    Just (SHelperErr e) -> throwIO e 

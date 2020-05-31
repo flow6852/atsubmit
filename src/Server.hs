@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 
@@ -61,9 +60,9 @@ server action sock = do
         raw <- fromStrict <$> recvMsg sock 1024
         case DA.decode raw of
                 Just request -> do
-                        response <- liftIO $ action sock $ request
+                        response <- action sock request
                         sendMsg sock ((toStrict.DA.encode) response) 1024
-                        return $ not $ response == SHelperOk (StopRes ())
+                        return $ response /= SHelperOk (StopRes ())
                 Nothing -> do 
                         sendMsg sock ((toStrict.DA.encode) JsonParseError) 1024
                         return True
@@ -117,11 +116,11 @@ requestCheck (CGetReq cname userdir) = Ok
 requestCheck (TestReq source qname) = Ok
 requestCheck (SubmitReq source qname) = Ok
 requestCheck (DebugReq source din) = Ok
-requestCheck (PrintReq) = Ok
+requestCheck PrintReq = Ok
 requestCheck (ShowReq qname) = Ok
 requestCheck (ResultReq cname) = Ok
-requestCheck (StopReq) = Ok
-requestCheck (LogoutReq) = Ok
+requestCheck StopReq = Ok
+requestCheck LogoutReq = Ok
 
 evalSHelper :: MVar Contest -> SHelper a -> IO a
 
@@ -131,9 +130,9 @@ evalSHelper mvcont (Login (Username user) (Password pass)) = do
  let csrf_tkn = (getCsrfToken.decodeUtf8.toStrict.getResponseBody) fstres
  let fstcke = getResponseHeader hSetCookie fstres
  response <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", user), ("password", pass), ("csrf_token", csrf_tkn)]
- when ((checkFailLogin.getResponseBody) response) $ (createContest V.empty [] []) >>= \x -> putMVar mvcont x >> throwIO FailLogin
+ when ((checkFailLogin.getResponseBody) response) $ createContest V.empty [] [] >>= \x -> putMVar mvcont x >> throwIO FailLogin
 
- (createContest V.empty (getResponseHeader hSetCookie response) csrf_tkn) >>= \x -> putMVar mvcont x
+ createContest V.empty (getResponseHeader hSetCookie response) csrf_tkn >>= \x -> putMVar mvcont x
  return ()
  where
   checkFailLogin :: BSL.ByteString -> Bool
@@ -155,9 +154,9 @@ evalSHelper mvcont (CGet (CName cn) (Userdir ud)) = do
 
  quests <- loop result ud contest `catch` \(e :: SHelperException) -> throwIO e
                                   `catch` \(e :: SomeException) -> throwIO e
- let qs = (questions contest) V.++ quests
+ let qs = questions contest V.++ quests
  swapMVar mvcont $ contest {questions = qs}
- return $ V.map (\x -> QName x) result
+ return $ V.map QName result
  where
   loop :: V.Vector T.Text -> FilePath -> Contest -> IO (V.Vector Question)
   loop [] d c = return V.empty
@@ -165,7 +164,7 @@ evalSHelper mvcont (CGet (CName cn) (Userdir ud)) = do
    result <- getPageInfo (V.head t) d c `catch` \(e :: SHelperException) -> throwIO e `catch` \(e :: SomeException) -> throwIO e
    next <- loop (V.tail t) d c `catch` \(e :: SHelperException) -> throwIO e 
                                `catch` \(e :: SomeException) -> throwIO e 
-   return $ (V.cons result next)
+   return $ V.cons result next
 
 evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
  contest <- readMVar mvcont
@@ -194,7 +193,7 @@ evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
                     Nothing -> IE
    sendMsg sock ((toStrict.DA.encode) res) 1024
    case res of CE comp -> return ()
-               IE      -> return ()
+               IE      -> throwIO InternalError
                _       -> testLoop c (V.tail qs) func main
 
 evalSHelper mvcont (Submit (Source source) (QName qn)) = do
@@ -223,10 +222,9 @@ evalSHelper mvcont (Types.Debug (Source source) (DIn din)) = do
                      Just _  -> DTLE
                      Nothing -> DIE
 
-evalSHelper mvcont (Print) = do
- contest <- readMVar mvcont
- let qs = (questions contest)
- return $ V.map ((\x -> QName x).T.takeWhileEnd (/='/').qurl) qs
+evalSHelper mvcont Print = do
+ contest <- readMVar mvcont 
+ return $ V.map (QName . T.takeWhileEnd (/='/').qurl) (questions contest)
 
 evalSHelper mvcont (Show (QName qn)) = do
  contest <- readMVar mvcont
@@ -246,9 +244,9 @@ evalSHelper mvcont (Result (CName cn)) = do
    result cursor = do
     let subtime = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                              &// attributeIs "class" "fixtime fixtime-second"
-        c = Prelude.concatMap content.lineNGet (cOrP (cursor)).Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
-                                                                                                &// element "td"
-                                                                                                &// element "a" -- [question, uname, details]
+        c = Prelude.concatMap content.lineNGet (cOrP cursor).Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
+                                                                                              &// element "td"
+                                                                                              &// element "a" -- [question, uname, details]
         result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
                                                                             &// element "td"
                                                                             &// attributeIs "aria-hidden" "true"
@@ -267,16 +265,15 @@ evalSHelper mvcont (Result (CName cn)) = do
    zipLines [s] [c] [r] = [[s, c, r]]
    zipLines (s:t) (c:n) (r:e) = [s, c, r]:zipLines t n e
 
-evalSHelper mvcont (Stop) = do
+evalSHelper mvcont Stop = do
  contest <- readMVar mvcont
- BSC.writeFile (((T.unpack.homedir) contest) ++ cookieFile) ((BSC.unlines.cookie) contest)
+ BSC.writeFile ((T.unpack.homedir) contest ++ cookieFile) ((BSC.unlines.cookie) contest)
  return ()
 
-evalSHelper mvcont (Logout) = do
+evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie contest) [("csrf_token", csrf_token contest)]
  when (getResponseStatus res /= status200) $ throwIO Unknown
- return ()
 
 getContestInfo :: T.Text -> FilePath -> Contest -> IO (V.Vector T.Text) -- (question names)
 getContestInfo cn userdir contest = let contesturl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/tasks"] in do
@@ -285,8 +282,8 @@ getContestInfo cn userdir contest = let contesturl = V.foldl1 T.append ["https:/
   return $ (V.fromList.quests.fromDocument.parseLBS.getResponseBody) res 
  where
   quests :: Cursor -> [T.Text]
-  quests = (Prelude.map (T.takeWhileEnd (/='/')).Prelude.concatMap (attribute "href").
-           ($// attributeIs "class" "text-center no-break" &// element "a"))
+  quests = Prelude.map (T.takeWhileEnd (/='/')).Prelude.concatMap (attribute "href").
+           ($// attributeIs "class" "text-center no-break" &// element "a")
 
 getPageInfo :: T.Text -> FilePath -> Contest -> IO Question
 getPageInfo qn userdir contest = do
@@ -295,7 +292,7 @@ getPageInfo qn userdir contest = do
  when (V.elem questurl ((V.map qurl.questions) contest)) $ throwIO AlreadyGet 
 
  res <- getRequestWrapper questurl (cookie contest)
- when (getResponseStatus res /= status200) $ throwIO $ QuestionNotFound
+ when (getResponseStatus res /= status200) $ throwIO QuestionNotFound
 
  let fname = T.unpack (V.foldl1 T.append [T.pack userdir, "/", qn, ".html"])
  TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)

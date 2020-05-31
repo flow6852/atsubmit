@@ -31,7 +31,6 @@ newtype TAns = TAns T.Text deriving (Show, Eq)
 newtype Message = Message T.Text deriving (Show, Eq)
 newtype CResult = CResult [[T.Text]] deriving (Show, Eq)
 
-
 data Question = Question { qurl :: T.Text
                          , qio  :: V.Vector (T.Text, T.Text)
                          } deriving (Show, Eq)
@@ -143,7 +142,7 @@ data LangJson = LangJson { name :: T.Text
                          , langid :: T.Text
                          } deriving (Show, Eq)
  
-data LJBase = LJBase { language :: V.Vector LangJson } deriving (Show, Eq)
+newtype LJBase = LJBase { language :: V.Vector LangJson } deriving (Show, Eq)
 
 
 deriveJSON defaultOptions ''Username
@@ -164,8 +163,8 @@ deriveJSON defaultOptions ''Question
 deriveJSON defaultOptions ''Sizes
 deriveJSON defaultOptions ''SHelperResponce
 deriveJSON defaultOptions ''SHelperRequest
-deriveJSON defaultOptions ''SHelperServerRequest
-deriveJSON defaultOptions ''SHelperServerResponce
+deriveJSON defaultOptions {sumEncoding = ObjectWithSingleField} ''SHelperServerRequest
+deriveJSON defaultOptions {sumEncoding = ObjectWithSingleField} ''SHelperServerResponce
 deriveJSON defaultOptions ''SHelperException
 deriveJSON defaultOptions ''TestBodyRes
 deriveJSON defaultOptions ''DebugBodyRes

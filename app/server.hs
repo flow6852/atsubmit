@@ -27,10 +27,3 @@ main = do
  let action = server (actionSHelper contest)
  daemonize $ runServer (path ++ sockpath) action
 
--- newLogin :: IO Contest
--- newLogin = do
---  [user, pass] <- getAtKeys
---  result <- atLogin nullContest (nullReqAtSubmit{username = Just (T.pack user), password = Just (T.pack pass)})
---  case result of
---   Left (c, b)  -> return nullContest
---   Right (c, b) -> return c

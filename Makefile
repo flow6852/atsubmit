@@ -8,11 +8,11 @@ LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 .PHONY: build install clean test forvim
 build :
 	@stack build
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 test:
 	@stack test --no-run-tests
-	@sudo install $(shell find . -name $(BIN_NAME)-test -type f) $(LOCAL_BIN_PATH)/$(BIN_NAME)-test
 
 install:
 	@stack build
