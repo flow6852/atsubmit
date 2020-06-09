@@ -12,7 +12,7 @@ build :
 	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 test:
-	@stack test --no-run-tests
+	@stack test
 
 install:
 	@stack build
@@ -22,7 +22,7 @@ install:
 	@if [ ! -d $(LOCAL_CONF_PATH) ]; then mkdir $(LOCAL_CONF_PATH) ; fi
 	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir $(LOCAL_LIB_PATH) ; fi
 	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir $(LOCAL_MAN_PATH) ; fi
-	@sudo install $(shell stack exec which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
 	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
 	@if [ $(shell docker image ls atjudge_rs | wc -l) -eq 1 ]; then docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
 	@cp doc/help.man $(LOCAL_MAN_PATH)/$(BIN_NAME).man

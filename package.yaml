@@ -39,7 +39,8 @@ library:
           - aeson
           - transformers
           - uri-encode
-
+          - unbounded-delays
+          - containers
 executables:
   atsubmit-server:
     main:                server.hs

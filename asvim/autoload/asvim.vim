@@ -2,15 +2,36 @@ autocmd QuitPre * call asvim#AtClose()
 call setqflist([], " ", {'lines':systemlist('echo first')})
 function! asvim#AtStart(...)
 	copen
-	call setqflist([], " ", {'nr':'$', 'lines': systemlist("atsubmit")})
+	call setqflist([], " ", {'nr':'$', 'lines': systemlist("atsubmit-server")})
 	wincmd k
 endfunction
 
-function! asvim#AtGet(...) "AtGet question
+function! asvim#AtQGet(...) "AtQGet question
 	if a:0 != 1
-		let cmd = "echo \"error :: command is \"AtGet [question name] \" \""
-	else 
-		let cmd = "atsubmit get " . a:1 . "; echo $?"
+		let cmd = "echo \"error :: command is \"AtQGet [question name] \" \""
+        else
+		let cmd = "atsubmit-client qget " . a:1 . "; echo $?"
+		let getpage = systemlist(cmd)
+		let status = str2nr(getpage[len(getpage)-1])
+		if status != 0
+			let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
+		else
+                
+			echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
+			call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
+			let cmd = "echo " . a:1
+		endif
+	endif
+	copen
+	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
+	wincmd k
+endfunction
+
+function! asvim#AtCGet(...) "AtCGet contest
+	if a:0 != 1
+		let cmd = "echo \"error :: command is \"AtCGet [contest name] \" \""
+        else
+		let cmd = "atsubmit-client cget " . a:1 . "; echo $?"
 		let getpage = systemlist(cmd)
 		let status = str2nr(getpage[len(getpage)-1])
 		if status != 0
@@ -27,10 +48,19 @@ function! asvim#AtGet(...) "AtGet question
 endfunction
 
 function! asvim#AtShow(...) " AtGet [question]
+	if a:0 == 1
+		let cmd = "atsubmit-client show " . a:1
+	else
+		let cmd = "echo \"error :: command is \"AtShow [question name] \" \""
+	endif
+	copen
+	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
+	wincmd k
+endfunction
+
+function! asvim#AtPrint(...) " AtPrint
 	if a:0 == 0
-		let cmd = "atsubmit show"
-	elseif a:0 == 1
-		let cmd = "atsubmit show " . a:1
+		let cmd = "atsubmit-client print"
 	else
 		let cmd = "echo \"error :: command is \"AtShow [question name] \" \""
 	endif
@@ -43,7 +73,7 @@ function! asvim#AtSubmit(...) " AtSubmit question
 	if a:0 != 1
 		let cmd = "echo \"error :: command is \"AtSubmit [question name] \" \""
 	else 
-		let cmd = "atsubmit submit " . a:1 . " " . expand("%")
+		let cmd = "atsubmit-client submit " . a:1 . " " . expand("%")
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
@@ -54,7 +84,7 @@ function! asvim#AtTest(...) " AtTest question
 	if a:0 != 1
 		let cmd = "echo \"error :: command is \"AtTest [question name] \" \""
 	else 
-		let cmd = "atsubmit test " . a:1 . " " . expand("%")
+		let cmd = "atsubmit-client test " . a:1 . " " . expand("%")
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
@@ -70,14 +100,14 @@ function! asvim#AtDebug(...) "AtDebug
 	endwhile
 	let tmp = tempname()
 	call writefile(txt, tmp)
-	let cmd = "atsubmit debug " . expand("%") . " " . tmp
+	let cmd = "atsubmit-client debug " . expand("%") . " " . tmp
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
 	wincmd k
 endfunction
 
 function! asvim#AtLogin(...) "AtLogin
-	let cmd = "atsubmit login"
+	let cmd = "atsubmit-client login"
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
 	wincmd k
@@ -85,9 +115,9 @@ endfunction
 
 function! asvim#AtResult(...) "AtResult question
 	if a:0 == 0
-		let cmd = "atsubmit result"
+		let cmd = "atsubmit-client result"
 	elseif
-		let cmd = "atsubmit result " . a:1 
+		let cmd = "atsubmit-client result " . a:1 
 	else 
 		let cmd = "echo \"error :: command is \"AtResult [ , question name] \" \""
 	endif
@@ -97,20 +127,20 @@ function! asvim#AtResult(...) "AtResult question
 endfunction
 
 function! asvim#AtLogout(...) " AtLogout
-	let cmd = "atsubmit logout"
+	let cmd = "atsubmit-client logout"
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
 	wincmd k
 endfunction
 
 function! asvim#AtStop(...) " AtStop
-	let cmd = "atsubmit stop"
+	let cmd = "atsubmit-client stop"
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
 	cclose
 endfunction
 
 function! asvim#AtClose()
-	:! atsubmit stop
+	:! atsubmit-client stop
 	cclose
 endfunction
 

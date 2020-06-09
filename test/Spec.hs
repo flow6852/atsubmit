@@ -20,6 +20,7 @@ sockpath = "/.local/lib/atsubmit/atsubmit.sock"
 
 main :: IO ()
 main = do
+ TIO.putStrLn $ T.pack "start test."
  path <- getEnv "HOME"
  file_exists <- doesFileExist (path ++ cookieFile)
  dat <- (if file_exists then BSC.readFile (path ++ cookieFile) >>= (\x -> createContest V.empty (BSC.lines x) (scrapingCsrfToken x))

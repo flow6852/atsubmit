@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Server where
 
@@ -17,7 +18,10 @@ import qualified Data.ByteString as BS
 import qualified Data.Vector as V
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Char8 as BSC
+import qualified Data.List as L
+import qualified Data.Map as M
 import Text.HTML.DOM
+import qualified Text.XML as TX
 import Text.XML.Cursor
 import Control.Monad
 import Control.Applicative
@@ -31,6 +35,7 @@ import Network.HTTP.Simple
 import Network.HTTP.Types.Status
 import Network.Socket
 import Network.HTTP.Types.Header
+import qualified Network.URI.Encode as NUE
 
 runServer :: FilePath -> (Socket -> IO Bool) -> IO ()
 runServer path server = do
@@ -110,14 +115,28 @@ actionSHelper contest sock (SHelperServerRequest request) = requestHandler `catc
                 return $ SHelperOk (LogoutRes result)
 
 requestCheck :: SHelperRequest -> CheckErr
-requestCheck (LoginReq user pass) = Ok
+requestCheck (LoginReq (Username "") _) = Err "don't set username."
+requestCheck (LoginReq _ (Password "")) = Err "don't set password."
+requestCheck (LoginReq (Username user) (Password pass)) = Ok
+requestCheck (QGetReq (QName "") _) = Err "don't set question name." 
+requestCheck (QGetReq _ (Userdir "")) = Err "don't set user working directory."
 requestCheck (QGetReq qname userdir) = Ok
+requestCheck (CGetReq (CName "") _) = Err "don't set contest name." 
+requestCheck (CGetReq _ (Userdir "")) = Err "don't set user working directory."
 requestCheck (CGetReq cname userdir) = Ok
+requestCheck (TestReq (Source "") _) = Err "don't set source file."
+requestCheck (TestReq _ (QName "")) = Err "don't set question name."
 requestCheck (TestReq source qname) = Ok
+requestCheck (SubmitReq (Source "") _) = Err "don't set source file."
+requestCheck (SubmitReq _ (QName "")) = Err "don't set question name."
 requestCheck (SubmitReq source qname) = Ok
+requestCheck (DebugReq (Source "") _) = Err "don't set source file."
+requestCheck (DebugReq _ (DIn "")) = Err "don't set debug file."
 requestCheck (DebugReq source din) = Ok
 requestCheck PrintReq = Ok
+requestCheck (ShowReq (QName "")) = Err "don't set question name."
 requestCheck (ShowReq qname) = Ok
+requestCheck (ResultReq (CName "")) = Err "don't set contest name."
 requestCheck (ResultReq cname) = Ok
 requestCheck StopReq = Ok
 requestCheck LogoutReq = Ok
@@ -127,7 +146,7 @@ evalSHelper :: MVar Contest -> SHelper a -> IO a
 evalSHelper mvcont (Login (Username user) (Password pass)) = do
  contest <- takeMVar mvcont
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
- let csrf_tkn = (getCsrfToken.decodeUtf8.toStrict.getResponseBody) fstres
+ let csrf_tkn = scrapingCsrfToken fstres
  let fstcke = getResponseHeader hSetCookie fstres
  response <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", user), ("password", pass), ("csrf_token", csrf_tkn)]
  when ((checkFailLogin.getResponseBody) response) $ createContest V.empty [] [] >>= \x -> putMVar mvcont x >> throwIO FailLogin
@@ -137,6 +156,10 @@ evalSHelper mvcont (Login (Username user) (Password pass)) = do
  where
   checkFailLogin :: BSL.ByteString -> Bool
   checkFailLogin = Prelude.null.($// attributeIs "class" "alert alert-success alert-dismissible col-sm-12 fade in").fromDocument.parseLBS
+  scrapingCsrfToken :: Response ByteString -> T.Text
+  scrapingCsrfToken = (M.! TX.Name {TX.nameLocalName = "value", TX.nameNamespace = Nothing, TX.namePrefix = Nothing}).
+                       TX.elementAttributes.(\case TX.NodeElement a -> a).Prelude.head.Prelude.map node.
+                       ($// attributeIs "name" "csrf_token").fromDocument.parseLBS.getResponseBody
 
 evalSHelper mvcont (QGet (QName qn) (Userdir ud)) = do
  contest <- readMVar mvcont
@@ -297,19 +320,27 @@ getPageInfo qn userdir contest = do
  let fname = T.unpack (V.foldl1 T.append [T.pack userdir, "/", qn, ".html"])
  TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)
  return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
- where 
-  questionIO :: Cursor -> V.Vector (T.Text, T.Text)
-  questionIO cursor = do
-   let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
-   V.fromList.ioZip $ Prelude.map chnl.Prelude.concatMap content $ Prelude.concat.Prelude.tail $ cs
-  ioZip :: [T.Text] -> [(T.Text, T.Text)]
-  ioZip (i:o:lists) 
-   | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
-   | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
-   | otherwise                                                                = (i, o):ioZip lists
-  chnl :: T.Text -> T.Text
-  chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
-  rewriteHtml :: T.Text -> T.Text
-  rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn"
-  ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
+
+questionIO :: Cursor -> V.Vector (T.Text, T.Text)
+questionIO cursor = do
+ let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
+ V.fromList.ioZip $ Prelude.map chnl.Prelude.concatMap content $ Prelude.concat.Prelude.tail $ cs
+ioZip :: [T.Text] -> [(T.Text, T.Text)]
+ioZip (i:o:lists) 
+ | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
+ | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
+ | otherwise                                                                = (i, o):ioZip lists
+chnl :: T.Text -> T.Text
+chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
+rewriteHtml :: T.Text -> T.Text
+rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn"
+ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
+
+cookieCsrfToken :: BSC.ByteString -> T.Text
+cookieCsrfToken = decodeUtf8.(\case
+ Nothing -> ""
+ Just a -> BSC.drop 11 a).L.find (\x -> BSC.pack "csrf_token"== BSC.take 10 x).BSC.split '\NUL'.NUE.decodeByteString
+-- getCsrfToken :: T.Text -> T.Text
+-- getCsrfToken = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") 
+
 

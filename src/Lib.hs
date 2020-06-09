@@ -26,123 +26,17 @@ import qualified Data.Aeson as DA
 import Turtle
 import Turtle.Line
 import qualified Control.Foldl as CF
-
--- data  Sizes = Sizes { socksize :: Int
---                    , datasize :: Int
---                    } deriving (Show, Eq)
---
---instance DA.ToJSON Sizes where
--- toJSON (Sizes s d) = DA.object [ "socksize" DA..= s, "datasize" DA..= d]
---
---instance DA.FromJSON Sizes where
--- parseJSON (DA.Object v) = Sizes <$> (v DA..: "socksize") <*> (v DA..: "datasize" )
+import Control.Concurrent.Timeout
 
 langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
 cookieFile = "/.cache/atsubmit/cookie"
 
--- type AtFunc = Contest -> ReqAtSubmit -> IO (Either (Int, T.Text) (Contest, ResAtSubmit))
--- 
--- data Question = Question { qurl :: T.Text -- question page's url
---                          , qio :: V.Vector (T.Text, T.Text) -- input, output
---                          } deriving (Show, Eq)
--- 
--- data Contest = Contest { questions :: V.Vector Question 
---                        , cookie :: [BSC.ByteString]
---                        , csrf_token :: T.Text
---                        , homedir :: T.Text
---                        , main_file :: T.Text
---                        , input_file :: T.Text
---                        , compile_file :: T.Text
---                        , output_file :: T.Text
---                        } deriving (Show, Eq)
--- 
--- data ReqAtSubmit = ReqAtSubmit { rcom :: T.Text -- raw command
---                                , subcmd :: T.Text -- text
---                                , cname :: Maybe T.Text -- contest name (ex abc120 
---                                , qname :: Maybe T.Text -- question name (ex abc_a
---                                , file :: Maybe T.Text -- have to full path
---                                , userdir :: T.Text
---                                , password :: Maybe T.Text -- only use login
---                                , username :: Maybe T.Text -- only use login
---                                , debug_input :: T.Text -- only use debug
---                                } deriving (Show, Eq)
--- 
--- data ResAtSubmit = ResAtSubmit { resstatus :: Int    -- responce status 
---                                , resmsg    :: T.Text -- responce message
---                                , resresult :: [[T.Text]] -- [WA, output, testcase] or [input, output]
---                                } deriving (Show, Eq)
--- 
--- data LangJson = LangJson { name :: T.Text
---                          , extention :: V.Vector T.Text
---                          , is_docker :: Bool
---                          , docker_image :: Maybe T.Text
---                          , compile :: Maybe T.Text
---                          , exec :: Maybe T.Text
---                          , langid :: T.Text
---                          } deriving (Show, Eq)
--- 
--- data LJBase = LJBase { language :: V.Vector LangJson } deriving (Show, Eq)
--- 
--- instance DA.FromJSON ReqAtSubmit where
---  parseJSON (DA.Object v) = ReqAtSubmit <$> (v DA..: "rcom")
---                                        <*> (v DA..: "subcmd")
---                                        <*> (v DA..:? "cname")
---                                        <*> (v DA..:? "qname")
---                                        <*> (v DA..:? "file")
---                                        <*> (v DA..: "userdir")
---                                        <*> (v DA..:? "username")
---                                        <*> (v DA..:? "password")
---                                        <*> (v DA..: "debug_input")
--- 
--- instance DA.ToJSON ReqAtSubmit where
---  toJSON (ReqAtSubmit rc sc cn qn f u un ps di) = DA.object [ "rcom" DA..= rc
---                                                            , "subcmd" DA..= sc
---                                                            , "cname" DA..= cn
---                                                            , "qname" DA..= qn
---                                                            , "file" DA..= f
---                                                            , "userdir" DA..= u
---                                                            , "username" DA..= un 
---                                                            , "password" DA..= ps
---                                                            , "debug_input" DA..= di]
--- 
--- instance DA.FromJSON ResAtSubmit where
---  parseJSON (DA.Object v) = ResAtSubmit <$> (v DA..: "resstatus")
---                                        <*> (v DA..: "resmsg")
---                                        <*> (v DA..: "resresult")
--- 
--- instance DA.ToJSON ResAtSubmit where
---  toJSON (ResAtSubmit rs rm rr) = DA.object [ "resstatus" DA..= rs
---                                            , "resmsg" DA..= rm
---                                            , "resresult" DA..= rr]
--- 
--- instance DA.FromJSON LJBase where parseJSON (DA.Object v) = LJBase <$> (v DA..: "language")
--- instance DA.ToJSON LJBase where toJSON (LJBase l) = DA.object [ "language" DA..= l ]
--- 
--- instance DA.FromJSON LangJson where
---  parseJSON (DA.Object v) = LangJson <$> (v DA..: "name")
---                                     <*> (v DA..: "extention")
---                                     <*> (v DA..: "is_docker")
---                                     <*> (v DA..:? "docker_image")
---                                     <*> (v DA..:? "compile")
---                                     <*> (v DA..:? "exec")
---                                     <*> (v DA..: "langid")
--- 
--- instance DA.ToJSON LangJson where
---  toJSON (LangJson n e id di c ex l) = DA.object [ "name" DA..= n
---                                                 , "extention" DA..= e
---                                                 , "is_docker" DA..= id
---                                                 , "docker_image" DA..= di
---                                                 , "compile" DA..= c 
---                                                 , "exec" DA..= c 
---                                                 , "langid" DA..= l]
-
 nullContest = Contest { questions = [], cookie = [], csrf_token = "", homedir = "", main_file = ""
                       , input_file = "", compile_file = "", output_file = ""}
+
 nullQuestion = Question { qurl = "", qio = []}
---nullReqAtSubmit = ReqAtSubmit { rcom = "", subcmd = "", cname = Nothing, qname = Nothing, file = Nothing
---                              , userdir = "", username = Nothing, password = Nothing, debug_input = []}
---nullResAtSubmit = ResAtSubmit { resstatus = 100, resmsg = "nothing", resresult = []}
+
 nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_image = Nothing
                         , compile = Nothing, exec = Nothing, langid = ""}
 
@@ -156,48 +50,6 @@ createContest q c t = getHomeDirectory >>= \d ->
 
 createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
 createQuestion url io = Question { qurl = url, qio = io}
-
--- createReqAtSubmit :: [T.Text] -> T.Text -> ReqAtSubmit
--- createReqAtSubmit r u = (parserAtSubmit r) {rcom = T.unwords r, userdir = u, username = Nothing, password = Nothing}
---  where
---   parserAtSubmit :: [T.Text] -> ReqAtSubmit
---   parserAtSubmit [] = nullReqAtSubmit
---   parserAtSubmit ("stop":l) = listAtSubmit ("stop":l) 1 -- atsubmit stop
---   parserAtSubmit ("get":l) = listAtSubmit ("get":l) 2 -- atsubmit get [contest | question]
---   parserAtSubmit ("show":l) = listAtSubmit ("show":l) 2 -- atsubmit show [ | question]
---   parserAtSubmit ("submit":l) = listAtSubmit ("submit":l) 3 -- atsubmit submit question source
---   parserAtSubmit ("test":l) = listAtSubmit ("test":l) 3 -- atsubmit test question source
---   parserAtSubmit ("debug":l) = listAtSubmit ("debug":l) 4 -- atsubmit debug source inputfile
---   parserAtSubmit ("login":l) = listAtSubmit ("login":l) 1 -- atsubmit login
---   parserAtSubmit ("result":l) = listAtSubmit ("result":l) 2 -- atsubmit result [ | question]
---   parserAtSubmit ("help":l) = listAtSubmit ("help":l) 1 -- atsubmit help
---   parserAtSubmit _ = nullReqAtSubmit
---   listAtSubmit :: [T.Text] -> Int -> ReqAtSubmit
---   listAtSubmit l n = case (Prelude.length l, n) of
---    (1, 1) -> nullReqAtSubmit { subcmd = l !! 0, cname = Nothing, qname = Nothing, file = Nothing} 
--- -- max size = 2
---    (2, 2) -> nullReqAtSubmit { subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1))
---                              , qname = getQName (l !! 1), file = Nothing}
---    (1, 2) -> nullReqAtSubmit { subcmd = l !! 0, cname = Nothing, qname = Nothing, file = Nothing} 
--- -- max size = 3
---    (2, 3) -> nullReqAtSubmit { subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1))
---                              , qname = getQName (l !! 1), file = Nothing}
---    (3, 3) -> nullReqAtSubmit { subcmd = l !! 0, cname = Just (T.takeWhile (/= '_') (l !! 1))
---                              , qname = getQName (l !! 1), file = Just (V.foldl1 T.append [u, "/", (l !! 2)])}
--- -- max size = 4
---    (3, 4) -> nullReqAtSubmit { subcmd = l !! 0, cname = Nothing, qname = Nothing
---                              , file = Just (V.foldl1 T.append [u, "/", (l !! 1)]), debug_input = l !! 2}
---    _ -> nullReqAtSubmit
---   getQName :: T.Text -> Maybe T.Text
---   getQName txt = case T.find (=='_') txt of
---    Nothing -> Nothing
---    Just a  -> Just txt
--- 
--- createResAtSubmit :: Int -> T.Text -> [[T.Text]] -> ResAtSubmit
--- createResAtSubmit rs rm rr = ResAtSubmit { resstatus = rs, resmsg = rm, resresult = rr}
--- 
--- createResAtStatus :: Int -> T.Text -> ResAtSubmit
--- createResAtStatus n rm = nullResAtSubmit { resstatus = n, resmsg = rm }
 
 getAtKeys :: IO [String]
 getAtKeys = do
@@ -228,23 +80,22 @@ recvMsg sock n = do
      recvLoop :: Int -> Int -> IO [S.ByteString]
      recvLoop k i = do
       msg <- NSBS.recv sock k
-      if (S.length msg) + i == (datasize size) then NSBS.send sock (toStrict "end") >> return [msg]
-      else if (S.length msg) + i > (datasize size) then NSBS.send sock (toStrict "end") >> return [msg]
-      else recvLoop k ((S.length msg) + i) >>= \next -> return (msg:next)
+      if S.length msg + i >= datasize size then NSBS.send sock (toStrict "end") >> return [msg]
+      else recvLoop k (S.length msg + i) >>= \next -> return (msg:next)
   _         -> return S.empty
- 
-sendMsg :: Socket -> S.ByteString -> Int -> IO ()
+
+sendMsg :: Socket -> S.ByteString -> Int -> IO BS.ByteString
 sendMsg sock msg n = do
  NSBS.send sock $ toStrict.DA.encode $ Sizes {socksize = n, datasize = S.length msg}
- json <- fromStrict <$> NSBS.recv sock n -- deside send size
- case DA.decode json of
-      Just size -> sendLoop (takeNList (socksize size) msg)
-      _         -> return ()
+ raw <- timeout 1000 (NSBS.recv sock n) -- deside send size
+ case raw of Just json -> case (DA.decode.fromStrict) json of Just size -> sendLoop (takeNList (socksize size) msg)
+                                                              _         -> return BS.empty
+             Nothing   -> sendMsg sock msg n -- resend timeout
  where
-  sendLoop :: [S.ByteString] -> IO()
+  sendLoop :: [S.ByteString] -> IO BS.ByteString
   sendLoop m = do 
    NSBS.send sock $ Prelude.head m
-   if Prelude.length m == 1 then NSBS.recv sock n >> return ()
+   if Prelude.length m == 1 then NSBS.recv sock n
    else sendLoop (Prelude.tail m)
 
 rmDup :: V.Vector T.Text -> V.Vector T.Text
@@ -255,7 +106,7 @@ takeNList n base = BS.take n base:(if BS.length base < n then [] else takeNList 
 
 getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
 getRequestWrapper url cke = do
- req <- if cke == [] then parseRequest (T.unpack url)
+ req <- if Prelude.null cke then parseRequest (T.unpack url)
         else setRequestHeader hCookie cke <$> parseRequest (T.unpack url)
  mng <- newManager tlsManagerSettings
  Network.HTTP.Conduit.httpLbs req mng
@@ -267,32 +118,23 @@ postRequestWrapper url cke body = do
  mng <- newManager tlsManagerSettings
  Network.HTTP.Conduit.httpLbs postReq mng
 
-scrapingCsrfToken :: BSC.ByteString -> T.Text
-scrapingCsrfToken = decodeUtf8.(\x -> case x of 
- Nothing -> ""
- Just a -> BSC.drop 11 a).L.find (\x -> BSC.pack "csrf_token"==(BSC.take 10 x)).BSC.split '\NUL'.NUE.decodeByteString
-
-getCsrfToken :: T.Text -> T.Text
-getCsrfToken body = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") $ body
-
-languageSelect :: T.Text -> T.Text -> IO (LangJson)-- name, extention, docker_image, langid
+languageSelect :: T.Text -> T.Text -> IO LangJson-- name, extention, docker_image, langid
 languageSelect home fp = do
  json <- BSL.fromStrict <$> (BS.readFile.T.unpack.T.append home) langJson
  case DA.decode json :: Maybe LJBase of
   Nothing -> return nullLangJson
   Just lists -> do
-   print $ language lists 
-   case V.find (\i -> V.elem (getExtention fp) (extention i)) (language lists) of 
+   case V.find (V.elem (getExtention fp).extention) (language lists) of 
     Nothing   -> return nullLangJson
     Just lang -> return lang
  where
   getExtention :: T.Text -> T.Text
-  getExtention = T.takeWhileEnd (\x -> x/='.')
+  getExtention = T.takeWhileEnd (/= '.')
 
 checkResult :: [T.Text] -> [T.Text] -> Bool
 checkResult [] []           = True
-checkResult ([]:es) (ans)   = checkResult es ans
-checkResult (r:es) (a:ns)   = if r == a then checkResult es ns else False
+checkResult ([]:es) ans   = checkResult es ans
+checkResult (r:es) (a:ns)   = r == a && checkResult es ns
 checkResult _ _             = False
 
 useDockerTest :: Maybe T.Text -> Contest -> T.Text -> IO (Maybe Int)

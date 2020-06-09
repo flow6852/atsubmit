@@ -15,6 +15,7 @@ import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
 import Control.Exception
 import qualified Data.List as L
+import System.Exit
 
 sockpath = "/.local/lib/atsubmit/atsubmit.sock"
 
@@ -24,21 +25,25 @@ main = do
  wd <- getCurrentDirectory
  arg <- Prelude.map T.pack <$> getArgs
  case arg of 
-  ["login"] -> login path `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["qget", qn] -> qget path qn wd `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["cget", cn] -> cget path cn wd `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["test", qn, fn] -> test path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["show", qn] -> Main.show path qn `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["print"] -> Main.print path `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["submit", qn, fn] -> submit path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["debug", src, din] -> debug path (T.unpack src) (T.unpack din) wd `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["result", cn] -> result path cn `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["stop"] -> stop path `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
-  ["logout"] -> logout path `catch` \(e :: SHelperException) -> TIO.putStrLn $ exceptionText e
+  ["login"] -> login path `catch` \(e :: SHelperException) -> exceptionText e
+  ["qget", qn] -> qget path qn wd `catch` \(e :: SHelperException) -> exceptionText e
+  ["cget", cn] -> cget path cn wd `catch` \(e :: SHelperException) -> exceptionText e
+  ["test", qn, fn] -> test path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> exceptionText e
+  ["show", qn] -> Main.show path qn `catch` \(e :: SHelperException) -> exceptionText e
+  ["print"] -> Main.print path `catch` \(e :: SHelperException) -> exceptionText e
+  ["submit", qn, fn] -> submit path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> exceptionText e
+  ["debug", src, din] -> debug path (T.unpack src) (T.unpack din) wd `catch` \(e :: SHelperException) -> exceptionText e
+  ["result", cn] -> result path cn `catch` \(e :: SHelperException) -> exceptionText e
+  ["stop"] -> stop path `catch` \(e :: SHelperException) -> exceptionText e
+  ["logout"] -> logout path `catch` \(e :: SHelperException) -> exceptionText e
 
 login :: FilePath -> IO ()
 login path = do
  [user, pass] <- map T.pack <$> getAtKeys 
+ putStrLn "user"
+ Prelude.print user 
+ putStrLn "pass"
+ Prelude.print pass
  sendServer path (evalSHelper (Login (Username user) (Password pass)))
  TIO.putStrLn "login accept."
 
@@ -84,6 +89,7 @@ print path = do
 
 submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 submit path fn qn wd = do
+ Prelude.print $ wd ++ ('/':fn)
  sendServer path (evalSHelper (Submit (Source (wd ++ ('/':fn))) (QName qn)))
  TIO.putStrLn "submit."
 
@@ -112,15 +118,15 @@ logout path = do
  sendServer path (evalSHelper Logout)
  TIO.putStrLn "logout accept."
 
-exceptionText :: SHelperException -> T.Text
+exceptionText :: SHelperException -> IO ()
 exceptionText e = case e of
- FailLogin -> "login failed."
- AlreadyGet -> "already get."
- NotExistsContest -> "not contest exist."
- QuestionNotFound -> "question not found."
- NotGetQuestion (QName a) -> T.append "not get : " a
- BadData a -> a
- JsonParseError -> "json parse error."
- InputErr -> "input error."
- InternalError -> "internal error."
- Unknown -> "unknown."
+ FailLogin -> TIO.putStrLn "login failed." >> exitWith (ExitFailure 1)
+ AlreadyGet -> TIO.putStrLn "already get." >> exitWith (ExitFailure 2)
+ NotExistsContest -> TIO.putStrLn "not contest exist." >> exitWith (ExitFailure 3)
+ QuestionNotFound -> TIO.putStrLn "question not found." >> exitWith (ExitFailure 4)
+ NotGetQuestion (QName a) -> TIO.putStrLn (T.append "not get : " a) >> exitWith (ExitFailure 5)
+ BadData a -> TIO.putStrLn a >> exitWith (ExitFailure 6)
+ JsonParseError -> TIO.putStrLn "json parse error." >> exitWith (ExitFailure 7)
+ InputErr -> TIO.putStrLn "input error." >> exitWith (ExitFailure 8)
+ InternalError -> TIO.putStrLn "internal error." >> exitWith (ExitFailure 9)
+ Unknown -> TIO.putStrLn "unknown." >> exitWith (ExitFailure 10)
