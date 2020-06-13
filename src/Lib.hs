@@ -151,6 +151,7 @@ useDockerTest (Just image) contest main = do
  case (ec,timecheck) of
   (ExitSuccess, Just "0") -> return $ Just 0
   (ExitSuccess, Just m)   -> return $ Just $ (read.T.unpack.lineToText) m
+  (ExitFailure 124, Just m) -> return $ Just 124
   (ExitFailure n, Just m) -> return $ Just $ if n == (read.T.unpack.lineToText) m then n else (read.T.unpack.lineToText) m 
 useDockerTest _ _ _ = return Nothing 
 
@@ -167,3 +168,6 @@ unUseDocker (Just compcmd) (Just execmd) contest main = do
     ExitFailure n   -> return $ Just 2
     ExitSuccess     -> return $ Just 0
 unUseDocker _ _ _ _ = return Nothing 
+
+rmFile :: System.IO.FilePath -> IO()
+rmFile path = doesFileExist path >>= \x -> when x (removeFile path)

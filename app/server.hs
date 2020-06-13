@@ -21,7 +21,7 @@ main :: IO ()
 main = do
  path <- getEnv "HOME"
  file_exists <- doesFileExist (path ++ cookieFile)
- dat <- (if file_exists then BSC.readFile (path ++ cookieFile) >>= (\x -> createContest V.empty (BSC.lines x) (cookieCsrfToken' x))
+ dat <- (if file_exists then BSC.readFile (path ++ cookieFile) >>= (\x -> createContest V.empty (BSC.lines x) (cookieCsrfToken x))
                         else return nullContest)
  contest <- newMVar dat
  let action = server (actionSHelper contest)

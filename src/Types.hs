@@ -163,8 +163,8 @@ deriveJSON defaultOptions ''Question
 deriveJSON defaultOptions ''Sizes
 deriveJSON defaultOptions ''SHelperResponce
 deriveJSON defaultOptions ''SHelperRequest
-deriveJSON defaultOptions {sumEncoding = ObjectWithSingleField} ''SHelperServerRequest
-deriveJSON defaultOptions {sumEncoding = ObjectWithSingleField} ''SHelperServerResponce
+deriveJSON defaultOptions ''SHelperServerRequest
+deriveJSON defaultOptions ''SHelperServerResponce
 deriveJSON defaultOptions ''SHelperException
 deriveJSON defaultOptions ''TestBodyRes
 deriveJSON defaultOptions ''DebugBodyRes

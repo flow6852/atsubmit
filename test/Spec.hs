@@ -23,7 +23,7 @@ main = do
  TIO.putStrLn $ T.pack "start test."
  path <- getEnv "HOME"
  file_exists <- doesFileExist (path ++ cookieFile)
- dat <- (if file_exists then BSC.readFile (path ++ cookieFile) >>= (\x -> createContest V.empty (BSC.lines x) (scrapingCsrfToken x))
+ dat <- (if file_exists then BSC.readFile (path ++ cookieFile) >>= (\x -> createContest V.empty (BSC.lines x) (cookieCsrfToken x))
                         else return nullContest)
  contest <- newMVar dat
  let action = server (actionSHelper contest)

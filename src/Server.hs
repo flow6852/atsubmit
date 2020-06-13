@@ -57,8 +57,6 @@ runServer path server = do
    bind s (SockAddrUnix path)
    listen s 1
    return s -- ready
-  rmFile :: FilePath -> IO()
-  rmFile path = doesFileExist path >>= \x -> when x (removeFile path)
 
 server :: (Socket -> SHelperServerRequest -> IO SHelperServerResponce) -> Socket -> IO Bool
 server action sock = do
@@ -297,6 +295,9 @@ evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie contest) [("csrf_token", csrf_token contest)]
  when (getResponseStatus res /= status200) $ throwIO Unknown
+ rmFile $ T.unpack (homedir contest) ++ cookieFile
+ swapMVar mvcont $ contest { cookie = [], csrf_token = "" }
+ return ()
 
 getContestInfo :: T.Text -> FilePath -> Contest -> IO (V.Vector T.Text) -- (question names)
 getContestInfo cn userdir contest = let contesturl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/tasks"] in do

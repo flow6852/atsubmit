@@ -59,10 +59,8 @@ evalSHelper (QGet qname udir) sock = do
    _ -> throwIO Unknown
 
 evalSHelper (CGet cname udir) sock = do
-  Prelude.print ((toStrict.DA.encode) (CGetReq cname udir))
   sendMsg sock ((toStrict.DA.encode) (CGetReq cname udir)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
-  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (CGetRes cn)) -> return cn
    Just (SHelperErr e) -> throwIO e 
@@ -70,8 +68,7 @@ evalSHelper (CGet cname udir) sock = do
 
 evalSHelper (Test _ source qname) sock = do
   sendMsg sock ((toStrict.DA.encode) (TestReq source qname)) 1024
-  testRsvloop sock 1024
-  raw <- fromStrict <$> recvMsg sock 1024
+  raw <- testRsvloop sock 1024
   case DA.decode raw of
    Just (SHelperOk (TestRes unit)) -> return unit
    Just (SHelperErr e) -> throwIO e 
@@ -86,30 +83,24 @@ evalSHelper (Submit source qname) sock = do
    _ -> throwIO Unknown
 
 evalSHelper (Types.Debug source din) sock = do
-  Prelude.print ((toStrict.DA.encode) (DebugReq source din))
   sendMsg sock ((toStrict.DA.encode) (DebugReq source din)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
-  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (DebugRes dbody)) -> return dbody
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
 evalSHelper Print sock = do
-  Prelude.print ((toStrict.DA.encode) PrintReq)
   sendMsg sock ((toStrict.DA.encode) PrintReq) 1024
   raw <- fromStrict <$> recvMsg sock 1024
-  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (PrintRes pr)) -> return pr
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
 evalSHelper (Show qname) sock = do
-  Prelude.print ((toStrict.DA.encode) (ShowReq qname))
   sendMsg sock ((toStrict.DA.encode) (ShowReq qname)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
-  Prelude.print raw
   case DA.decode raw of
    Just (SHelperOk (ShowRes qio)) -> return qio
    Just (SHelperErr e) -> throwIO e 
@@ -139,15 +130,21 @@ evalSHelper Logout sock = do
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
-testRsvloop :: Socket -> Int -> IO (Maybe SHelperServerResponce)
+testRsvloop :: Socket -> Int -> IO ByteString
 testRsvloop sock size = do
  raw <- fromStrict <$> recvMsg sock size
  case DA.decode raw of
-  Just AC -> Prelude.print "AC" >> testRsvloop sock size
-  Just (WA out ans) -> Prelude.print out >> Prelude.print ans >> testRsvloop sock size
-  Just (CE msg) -> Prelude.print msg >> testRsvloop sock size
-  Just RE -> Prelude.print "RE" >> testRsvloop sock size
-  Just TLE -> Prelude.print "TLE" >> testRsvloop sock size
-  Just IE  -> Prelude.print "IE" >> throwIO InternalError
-  _ -> case DA.decode raw of Just (SHelperOk (TestRes res)) -> return $ Just $ SHelperOk $ TestRes res
-                             _ -> throwIO JsonParseError
+  Just AC -> TIO.putStrLn "AC" >> testRsvloop sock size
+  Just (WA out ans) -> waPrint out ans >> testRsvloop sock size
+  Just (CE (Message msg)) -> TIO.putStrLn msg >> testRsvloop sock size
+  Just RE -> TIO.putStrLn "RE" >> testRsvloop sock size
+  Just TLE -> TIO.putStrLn "TLE" >> testRsvloop sock size
+  Just IE  -> TIO.putStrLn "IE" >> throwIO InternalError
+  _ -> return raw
+  where
+   waPrint :: TOut -> TAns -> IO()
+   waPrint (TOut out) (TAns ans) = do
+    TIO.putStrLn "====== output ======"
+    TIO.putStrLn out
+    TIO.putStrLn "====== answer ======"
+    TIO.putStrLn ans

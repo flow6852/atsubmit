@@ -40,10 +40,6 @@ main = do
 login :: FilePath -> IO ()
 login path = do
  [user, pass] <- map T.pack <$> getAtKeys 
- putStrLn "user"
- Prelude.print user 
- putStrLn "pass"
- Prelude.print pass
  sendServer path (evalSHelper (Login (Username user) (Password pass)))
  TIO.putStrLn "login accept."
 
@@ -122,7 +118,7 @@ exceptionText :: SHelperException -> IO ()
 exceptionText e = case e of
  FailLogin -> TIO.putStrLn "login failed." >> exitWith (ExitFailure 1)
  AlreadyGet -> TIO.putStrLn "already get." >> exitWith (ExitFailure 2)
- NotExistsContest -> TIO.putStrLn "not contest exist." >> exitWith (ExitFailure 3)
+ NotExistsContest -> TIO.putStrLn "contest not exist." >> exitWith (ExitFailure 3)
  QuestionNotFound -> TIO.putStrLn "question not found." >> exitWith (ExitFailure 4)
  NotGetQuestion (QName a) -> TIO.putStrLn (T.append "not get : " a) >> exitWith (ExitFailure 5)
  BadData a -> TIO.putStrLn a >> exitWith (ExitFailure 6)
