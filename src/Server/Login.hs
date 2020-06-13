@@ -23,7 +23,7 @@ atLogin contests msg = case (username msg, password msg) of
 getCookieAndCsrfToken :: T.Text -> T.Text -> IO (Either (Int, T.Text) (Contest, ResAtSubmit))
 getCookieAndCsrfToken un pw = do
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
- let csrf_tkn = (getCsrfToken.getResponseBody) fstres
+ let csrf_tkn = (getCsrfToken.decodeUtf8.BSL.toStrict.getResponseBody) fstres
 -- let csrf_tkn = (scrapingCsrfToken.BSL.toStrict.getResponseBody) fstres
 -- putStrLn "=== raw ==="
 -- print $ (BSL.toStrict.getResponseBody) fstres
