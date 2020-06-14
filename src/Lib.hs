@@ -123,10 +123,9 @@ languageSelect home fp = do
  json <- BSL.fromStrict <$> (BS.readFile.T.unpack.T.append home) langJson
  case DA.decode json :: Maybe LJBase of
   Nothing -> return nullLangJson
-  Just lists -> do
-   case V.find (V.elem (getExtention fp).extention) (language lists) of 
-    Nothing   -> return nullLangJson
-    Just lang -> return lang
+  Just lists -> case V.find (V.elem (getExtention fp).extention) (language lists) of 
+                     Nothing   -> return nullLangJson
+                     Just lang -> return lang
  where
   getExtention :: T.Text -> T.Text
   getExtention = T.takeWhileEnd (/= '.')

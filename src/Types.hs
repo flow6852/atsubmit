@@ -95,7 +95,7 @@ data SHelperResponce
         | LogoutRes ()
         deriving (Show, Eq)
 
-newtype SHelperServerRequest = SHelperServerRequest SHelperRequest
+newtype SHelperServerRequest = SHelperServerRequest SHelperRequest deriving (Show, Eq)
 data SHelperServerResponce = SHelperOk SHelperResponce | SHelperErr SHelperException deriving (Show, Eq)
 
 data SHelperException

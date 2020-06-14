@@ -75,7 +75,7 @@ actionSHelper contest sock (SHelperServerRequest request) = requestHandler `catc
                                                                            `catch` \(e :: SomeException) -> return (SHelperErr Unknown)
  where
   requestHandler :: IO SHelperServerResponce
-  requestHandler = case requestCheck request of
+  requestHandler = requestCheck request >>= \case 
    Err msg -> return $ SHelperErr (BadData msg)
    Ok -> case request of 
         LoginReq username password -> do
@@ -112,32 +112,36 @@ actionSHelper contest sock (SHelperServerRequest request) = requestHandler `catc
                 result <- evalSHelper contest Logout
                 return $ SHelperOk (LogoutRes result)
 
-requestCheck :: SHelperRequest -> CheckErr
-requestCheck (LoginReq (Username "") _) = Err "don't set username."
-requestCheck (LoginReq _ (Password "")) = Err "don't set password."
-requestCheck (LoginReq (Username user) (Password pass)) = Ok
-requestCheck (QGetReq (QName "") _) = Err "don't set question name." 
-requestCheck (QGetReq _ (Userdir "")) = Err "don't set user working directory."
-requestCheck (QGetReq qname userdir) = Ok
-requestCheck (CGetReq (CName "") _) = Err "don't set contest name." 
-requestCheck (CGetReq _ (Userdir "")) = Err "don't set user working directory."
-requestCheck (CGetReq cname userdir) = Ok
-requestCheck (TestReq (Source "") _) = Err "don't set source file."
-requestCheck (TestReq _ (QName "")) = Err "don't set question name."
-requestCheck (TestReq source qname) = Ok
-requestCheck (SubmitReq (Source "") _) = Err "don't set source file."
-requestCheck (SubmitReq _ (QName "")) = Err "don't set question name."
-requestCheck (SubmitReq source qname) = Ok
-requestCheck (DebugReq (Source "") _) = Err "don't set source file."
-requestCheck (DebugReq _ (DIn "")) = Err "don't set debug file."
-requestCheck (DebugReq source din) = Ok
-requestCheck PrintReq = Ok
-requestCheck (ShowReq (QName "")) = Err "don't set question name."
-requestCheck (ShowReq qname) = Ok
-requestCheck (ResultReq (CName "")) = Err "don't set contest name."
-requestCheck (ResultReq cname) = Ok
-requestCheck StopReq = Ok
-requestCheck LogoutReq = Ok
+requestCheck :: SHelperRequest -> IO CheckErr
+requestCheck (LoginReq (Username "") _) = return $ Err "don't set username."
+requestCheck (LoginReq _ (Password "")) = return $ Err "don't set password."
+requestCheck (LoginReq (Username user) (Password pass)) = return Ok
+requestCheck (QGetReq (QName "") _) = return $ Err "don't set question name." 
+requestCheck (QGetReq _ (Userdir "")) = return $ Err "don't set user working directory."
+requestCheck (QGetReq qname userdir) = return Ok
+requestCheck (CGetReq (CName "") _) = return $ Err "don't set contest name." 
+requestCheck (CGetReq _ (Userdir "")) = return $ Err "don't set user working directory."
+requestCheck (CGetReq cname userdir) = return  Ok
+requestCheck (TestReq (Source "") _) = return $ Err "don't set source file."
+requestCheck (TestReq _ (QName "")) =  return $ Err "don't set question name."
+requestCheck (TestReq (Source source) qname) = doesFileExist source >>= \x -> return $ if x then Ok else Err $ fileNotExists source
+requestCheck (SubmitReq (Source "") _) = return $ Err "don't set source file."
+requestCheck (SubmitReq _ (QName "")) = return $ Err "don't set question name."
+requestCheck (SubmitReq (Source source) qname) = doesFileExist source >>= \x -> return $ if x then Ok else Err $ fileNotExists source
+requestCheck (DebugReq (Source "") _) = return $ Err "don't set source file."
+requestCheck (DebugReq _ (DIn "")) = return $ Err "don't set debug file."
+requestCheck (DebugReq (Source source) (DIn din)) = doesFileExist source >>= \x -> doesFileExist din >>= \y -> 
+        return $ if x then if y then Ok else Err (fileNotExists din) else Err $ fileNotExists source
+requestCheck PrintReq = return Ok
+requestCheck (ShowReq (QName "")) =  return $ Err "don't set question name."
+requestCheck (ShowReq qname) = return Ok
+requestCheck (ResultReq (CName "")) = return $ Err "don't set contest name."
+requestCheck (ResultReq cname) = return Ok
+requestCheck StopReq = return Ok
+requestCheck LogoutReq = return Ok
+
+fileNotExists :: FilePath -> T.Text
+fileNotExists fn = V.foldl1 T.append ["file \"", T.pack fn ,"\" doesn't exist."]
 
 evalSHelper :: MVar Contest -> SHelper a -> IO a
 

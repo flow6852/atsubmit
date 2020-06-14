@@ -36,6 +36,7 @@ main = do
   ["result", cn] -> result path cn `catch` \(e :: SHelperException) -> exceptionText e
   ["stop"] -> stop path `catch` \(e :: SHelperException) -> exceptionText e
   ["logout"] -> logout path `catch` \(e :: SHelperException) -> exceptionText e
+  _ -> exceptionText (BadData "command error")
 
 login :: FilePath -> IO ()
 login path = do
@@ -51,7 +52,11 @@ qget path qn wd = do
 cget :: FilePath -> T.Text -> FilePath -> IO ()
 cget path cn wd = do
  res <- sendServer path (evalSHelper (CGet (CName cn) (Userdir wd)))
- Prelude.print res
+ cGetPrint res
+  where
+   cGetPrint :: V.Vector QName -> IO() 
+   cGetPrint qn = if V.null qn then return ()
+                  else case V.head qn of (QName pr) -> TIO.putStrLn pr >> cGetPrint (V.tail qn)
 
 test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 test path fn qn wd = do
@@ -85,7 +90,6 @@ print path = do
 
 submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 submit path fn qn wd = do
- Prelude.print $ wd ++ ('/':fn)
  sendServer path (evalSHelper (Submit (Source (wd ++ ('/':fn))) (QName qn)))
  TIO.putStrLn "submit."
 
