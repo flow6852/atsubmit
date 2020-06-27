@@ -30,6 +30,14 @@ newtype TOut = TOut T.Text deriving (Show, Eq)
 newtype TAns = TAns T.Text deriving (Show, Eq)
 newtype Message = Message T.Text deriving (Show, Eq)
 newtype CResult = CResult [[T.Text]] deriving (Show, Eq)
+newtype RLog = RLog (SHelperServerRequest, SHelperServerResponce) deriving (Show, Eq)
+data GetResult = GetResultOk QName 
+               | FromLocal QName
+               | AlreadyGet QName
+               | QuestionNotExist QName
+               | ContestNotExist CName
+               | Other
+               deriving (Show, Eq)
 
 data Question = Question { qurl :: T.Text
                          , qio  :: V.Vector (T.Text, T.Text)
@@ -38,6 +46,7 @@ data Question = Question { qurl :: T.Text
 data Contest = Contest { questions :: V.Vector Question 
                        , cookie :: [BSC.ByteString]
                        , csrf_token :: T.Text
+                       , rlogs :: V.Vector RLog
                        , homedir :: T.Text
                        , main_file :: T.Text
                        , input_file :: T.Text
@@ -54,28 +63,30 @@ data  Sizes = Sizes { socksize :: Int
 -- リクエストを受け取ってレスポンスを返す
 data SHelper a where
         Login  :: Username -> Password -> SHelper () -- ユーザ名とパスワードを受け取ってログインする.ContestStateのcookieとscrf_tokenの更新.
-        QGet   :: QName -> Userdir -> SHelper QName -- 問題名を受け取って問題を入手する.ContestStateのQuestionsを更新.
-        CGet   :: CName -> Userdir -> SHelper (V.Vector QName) -- コンテスト名を受け取ってそれに所属する問題のすべてを入手する.
+        QGet   :: V.Vector QName -> Userdir -> SHelper (V.Vector GetResult) -- 問題名を受け取って問題を入手する.ContestStateのQuestionsを更新.
+        CGet   :: V.Vector CName -> Userdir -> SHelper (V.Vector GetResult) -- コンテスト名を受け取ってそれに所属する問題のすべてを入手する.
         Test   :: Socket -> Source -> QName -> SHelper ()-- ファイルと問題名を受け取って結果を出力する. 
         Submit :: Source -> QName -> SHelper () -- ファイルと問題名を受け取って提出する.
         Debug  :: Source -> DIn -> SHelper DebugBodyRes -- ファイルと入力を受け取って出力を返す.
         Print  :: SHelper (V.Vector QName) -- ContestStateのQuestionsのすべてを返す.
         Show   :: QName -> SHelper QIO -- 問題を受け取ってその問題入出力を返す.
         Result :: CName -> SHelper CResult -- コンテストを受け取ってコンテストの結果を出力する.
+        Log    :: SHelper (V.Vector RLog)
         Stop   :: SHelper ()
         Logout :: SHelper ()
 
 -- クライアントからのリクエスト."tag" でjsonの形式を切り替える.
 data SHelperRequest 
         = LoginReq Username Password
-        | QGetReq QName Userdir
-        | CGetReq CName Userdir
+        | QGetReq (V.Vector QName) Userdir
+        | CGetReq (V.Vector CName) Userdir
         | TestReq Source QName
         | SubmitReq Source QName
         | DebugReq Source DIn
         | PrintReq
         | ShowReq QName
         | ResultReq CName
+        | LogReq 
         | StopReq
         | LogoutReq
         deriving(Show, Eq)
@@ -83,14 +94,15 @@ data SHelperRequest
 -- サーバからの最終レスポンス. "tag"でjsonの形式を切り替える.
 data SHelperResponce
         = LoginRes ()
-        | QGetRes QName
-        | CGetRes (V.Vector QName)
+        | QGetRes (V.Vector GetResult)
+        | CGetRes (V.Vector GetResult)
         | TestRes ()
         | SubmitRes ()
         | DebugRes DebugBodyRes
         | PrintRes (V.Vector QName)
         | ShowRes QIO
         | ResultRes CResult
+        | LogRes (V.Vector RLog)
         | StopRes ()
         | LogoutRes ()
         deriving (Show, Eq)
@@ -100,9 +112,6 @@ data SHelperServerResponce = SHelperOk SHelperResponce | SHelperErr SHelperExcep
 
 data SHelperException
         = FailLogin
-        | AlreadyGet
-        | NotExistsContest
-        | QuestionNotFound
         | NotGetQuestion QName
         | BadData T.Text
         | JsonParseError
@@ -161,6 +170,8 @@ deriveJSON defaultOptions ''Message
 deriveJSON defaultOptions ''CResult
 deriveJSON defaultOptions ''Question
 deriveJSON defaultOptions ''Sizes
+deriveJSON defaultOptions ''RLog
+deriveJSON defaultOptions ''GetResult
 deriveJSON defaultOptions ''SHelperResponce
 deriveJSON defaultOptions ''SHelperRequest
 deriveJSON defaultOptions ''SHelperServerRequest

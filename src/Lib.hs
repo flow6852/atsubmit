@@ -32,7 +32,7 @@ langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
 cookieFile = "/.cache/atsubmit/cookie"
 
-nullContest = Contest { questions = [], cookie = [], csrf_token = "", homedir = "", main_file = ""
+nullContest = Contest { questions = [], cookie = [], csrf_token = "",rlogs = [], homedir = "", main_file = ""
                       , input_file = "", compile_file = "", output_file = ""}
 
 nullQuestion = Question { qurl = "", qio = []}
@@ -41,8 +41,8 @@ nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_i
                         , compile = Nothing, exec = Nothing, langid = ""}
 
 createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> IO Contest
-createContest q c t = getHomeDirectory >>= \d -> 
-                      return Contest { questions = q, cookie = c, csrf_token = t, homedir = T.pack d
+createContest q c t = getHomeDirectory >>= \d ->
+                      return Contest { questions = q, cookie = c, csrf_token = t, rlogs = V.empty, homedir = T.pack d
                                      , main_file = T.append (T.pack d) "/.cache/atsubmit/src/source.txt"
                                      , input_file = T.append (T.pack d) "/.cache/atsubmit/src/input.txt"
                                      , compile_file = T.append (T.pack d) "/.cache/atsubmit/src/comp.txt"

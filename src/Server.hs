@@ -71,8 +71,14 @@ server action sock = do
                         return True
 
 actionSHelper :: MVar Contest -> Socket -> SHelperServerRequest -> IO SHelperServerResponce
-actionSHelper contest sock (SHelperServerRequest request) = requestHandler `catch` \(e :: SHelperException) -> return (SHelperErr e)
-                                                                           `catch` \(e :: SomeException) -> return (SHelperErr Unknown)
+actionSHelper contest sock (SHelperServerRequest request) = do
+ ret <- requestHandler `catch` \(e :: SHelperException) -> return (SHelperErr e)
+                       `catch` \(e :: SomeException) -> return (SHelperErr Unknown)
+ let req = case request of LoginReq username password -> LoginReq (Username "") (Password "")
+                           _                          -> request
+ cnt <- readMVar contest
+ swapMVar contest $ cnt {rlogs = V.snoc (rlogs cnt) (RLog (SHelperServerRequest req, ret))}
+ return ret 
  where
   requestHandler :: IO SHelperServerResponce
   requestHandler = requestCheck request >>= \case 
@@ -105,6 +111,9 @@ actionSHelper contest sock (SHelperServerRequest request) = requestHandler `catc
         ResultReq cname -> do
                 result <- evalSHelper contest (Result cname)
                 return $ SHelperOk (ResultRes result)
+        LogReq -> do
+                result <- evalSHelper contest Log
+                return $ SHelperOk (LogRes result)
         StopReq -> do
                 result <- evalSHelper contest Stop
                 return $ SHelperOk (StopRes result)
@@ -116,10 +125,10 @@ requestCheck :: SHelperRequest -> IO CheckErr
 requestCheck (LoginReq (Username "") _) = return $ Err "don't set username."
 requestCheck (LoginReq _ (Password "")) = return $ Err "don't set password."
 requestCheck (LoginReq (Username user) (Password pass)) = return Ok
-requestCheck (QGetReq (QName "") _) = return $ Err "don't set question name." 
+requestCheck (QGetReq [] _) = return $ Err "don't set question name." 
 requestCheck (QGetReq _ (Userdir "")) = return $ Err "don't set user working directory."
 requestCheck (QGetReq qname userdir) = return Ok
-requestCheck (CGetReq (CName "") _) = return $ Err "don't set contest name." 
+requestCheck (CGetReq [] _) = return $ Err "don't set contest name." 
 requestCheck (CGetReq _ (Userdir "")) = return $ Err "don't set user working directory."
 requestCheck (CGetReq cname userdir) = return  Ok
 requestCheck (TestReq (Source "") _) = return $ Err "don't set source file."
@@ -137,6 +146,7 @@ requestCheck (ShowReq (QName "")) =  return $ Err "don't set question name."
 requestCheck (ShowReq qname) = return Ok
 requestCheck (ResultReq (CName "")) = return $ Err "don't set contest name."
 requestCheck (ResultReq cname) = return Ok
+requestCheck LogReq = return Ok
 requestCheck StopReq = return Ok
 requestCheck LogoutReq = return Ok
 
@@ -146,7 +156,7 @@ fileNotExists fn = V.foldl1 T.append ["file \"", T.pack fn ,"\" doesn't exist."]
 evalSHelper :: MVar Contest -> SHelper a -> IO a
 
 evalSHelper mvcont (Login (Username user) (Password pass)) = do
- contest <- takeMVar mvcont
+ contest <- readMVar mvcont
  fstres <- getRequestWrapper "https://atcoder.jp/login" []
  let csrf_tkn = scrapingCsrfToken fstres
  let fstcke = getResponseHeader hSetCookie fstres
@@ -163,33 +173,19 @@ evalSHelper mvcont (Login (Username user) (Password pass)) = do
                        TX.elementAttributes.(\case TX.NodeElement a -> a).Prelude.head.Prelude.map node.
                        ($// attributeIs "name" "csrf_token").fromDocument.parseLBS.getResponseBody
 
-evalSHelper mvcont (QGet (QName qn) (Userdir ud)) = do
+evalSHelper mvcont (QGet qn (Userdir ud)) = do
  contest <- readMVar mvcont
- let check = V.elem qn (V.map (T.takeWhileEnd (/='/').qurl) (questions contest))
- when check $ throwIO AlreadyGet
+ (ret, next) <- V.unzip <$> mapM (\x -> getPageInfo x ud contest) qn `catch` \(e :: SHelperException) -> throwIO e 
+                                                                     `catch` \(e :: SomeException) -> throwIO e
+ swapMVar mvcont $ contest {questions = questions contest V.++ V.filter (/=nullQuestion) next}
+ return ret
 
- result <- getPageInfo qn ud contest `catch` \(e :: SHelperException) -> throwIO e
-                                     `catch` \(e :: SomeException) -> throwIO e
- swapMVar mvcont $ contest {questions = V.snoc (questions contest) result}
- return $ QName qn
-
-evalSHelper mvcont (CGet (CName cn) (Userdir ud)) = do
+evalSHelper mvcont (CGet cn (Userdir ud)) = do
  contest <- readMVar mvcont
- result <- getContestInfo cn ud contest `catch` \(e :: SHelperException) -> throwIO e
-
- quests <- loop result ud contest `catch` \(e :: SHelperException) -> throwIO e
-                                  `catch` \(e :: SomeException) -> throwIO e
- let qs = questions contest V.++ quests
- swapMVar mvcont $ contest {questions = qs}
- return $ V.map QName result
- where
-  loop :: V.Vector T.Text -> FilePath -> Contest -> IO (V.Vector Question)
-  loop [] d c = return V.empty
-  loop t d c  = do
-   result <- getPageInfo (V.head t) d c `catch` \(e :: SHelperException) -> throwIO e `catch` \(e :: SomeException) -> throwIO e
-   next <- loop (V.tail t) d c `catch` \(e :: SHelperException) -> throwIO e 
-                               `catch` \(e :: SomeException) -> throwIO e 
-   return $ V.cons result next
+ (res, quests) <- V.unzip <$> mapM (\x -> getContestInfo x ud contest) cn `catch` \(e :: SHelperException) -> throwIO e
+                                                                          `catch` \(e :: SomeException) -> throwIO e
+ swapMVar mvcont $ contest {questions = questions contest V.++ (V.filter (/=nullQuestion).V.concat.V.toList) quests}
+ return $ (V.concat.V.toList) res
 
 evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
  contest <- readMVar mvcont
@@ -295,6 +291,10 @@ evalSHelper mvcont Stop = do
  BSC.writeFile ((T.unpack.homedir) contest ++ cookieFile) ((BSC.unlines.cookie) contest)
  return ()
 
+evalSHelper mvcont Log = do
+ contest <- readMVar mvcont
+ return $ rlogs contest
+
 evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie contest) [("csrf_token", csrf_token contest)]
@@ -303,33 +303,39 @@ evalSHelper mvcont Logout = do
  swapMVar mvcont $ contest { cookie = [], csrf_token = "" }
  return ()
 
-getContestInfo :: T.Text -> FilePath -> Contest -> IO (V.Vector T.Text) -- (question names)
-getContestInfo cn userdir contest = let contesturl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/tasks"] in do
-  res <- getRequestWrapper contesturl (cookie contest)
-  when (getResponseStatus res /= status200) $ throwIO NotExistsContest
-  return $ (V.fromList.quests.fromDocument.parseLBS.getResponseBody) res 
+getContestInfo :: CName -> FilePath -> Contest -> IO (V.Vector GetResult, V.Vector Question) -- (question names)
+getContestInfo (CName cn) userdir contest = getRequestWrapper contesturl (cookie contest) >>= \res ->
+  if getResponseStatus res /= status200 then return (V.singleton (ContestNotExist (CName cn)),V.singleton nullQuestion)
+  else mapM (\x -> getPageInfo (QName x) userdir contest) ((V.fromList.quests.fromDocument.parseLBS.getResponseBody) res) >>= \x -> 
+   return $ V.unzip x
  where
+  contesturl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/tasks"]
   quests :: Cursor -> [T.Text]
   quests = Prelude.map (T.takeWhileEnd (/='/')).Prelude.concatMap (attribute "href").
            ($// attributeIs "class" "text-center no-break" &// element "a")
 
-getPageInfo :: T.Text -> FilePath -> Contest -> IO Question
-getPageInfo qn userdir contest = do
- let cn = T.takeWhile (/='_') qn
- let questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/tasks/", qn]
- when (V.elem questurl ((V.map qurl.questions) contest)) $ throwIO AlreadyGet 
-
- res <- getRequestWrapper questurl (cookie contest)
- when (getResponseStatus res /= status200) $ throwIO QuestionNotFound
-
- let fname = T.unpack (V.foldl1 T.append [T.pack userdir, "/", qn, ".html"])
- TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)
- return $ createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
+getPageInfo :: QName -> FilePath -> Contest -> IO (GetResult, Question)
+getPageInfo (QName qn) userdir contest = 
+-- if V.elem questurl ((V.map qurl.questions) contest) then return (AlreadyGet (QName qn), nullQuestion)
+ if V.elem qn (V.map (T.takeWhileEnd (/='/').qurl) (questions contest)) then return (AlreadyGet (QName qn),nullQuestion)
+ else doesFileExist fname >>= \fcheck -> 
+  if fcheck then Text.HTML.DOM.readFile fname >>= \res -> return (FromLocal (QName qn), newQuest res)
+  else getRequestWrapper questurl (cookie contest) >>= \res ->
+   if getResponseStatus res /= status200 then return (QuestionNotExist (QName qn), nullQuestion)
+   else do
+    TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)
+    let quest = createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
+    return (GetResultOk (QName qn), (newQuest.parseLBS.getResponseBody) res)
+ where
+  questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", T.takeWhile (/='_') qn, "/tasks/", qn]
+  fname = T.unpack (V.foldl1 T.append [T.pack userdir, "/", qn, ".html"])
+  newQuest raw = createQuestion questurl ((questionIO.fromDocument) raw)
 
 questionIO :: Cursor -> V.Vector (T.Text, T.Text)
 questionIO cursor = do
  let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
  V.fromList.ioZip $ Prelude.map chnl.Prelude.concatMap content $ Prelude.concat.Prelude.tail $ cs
+
 ioZip :: [T.Text] -> [(T.Text, T.Text)]
 ioZip (i:o:lists) 
  | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
@@ -347,5 +353,3 @@ cookieCsrfToken = decodeUtf8.(\case
  Just a -> BSC.drop 11 a).L.find (\x -> BSC.pack "csrf_token"== BSC.take 10 x).BSC.split '\NUL'.NUE.decodeByteString
 -- getCsrfToken :: T.Text -> T.Text
 -- getCsrfToken = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") 
-
-

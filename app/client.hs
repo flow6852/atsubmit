@@ -25,18 +25,19 @@ main = do
  wd <- getCurrentDirectory
  arg <- Prelude.map T.pack <$> getArgs
  case arg of 
-  ["login"] -> login path `catch` \(e :: SHelperException) -> exceptionText e
-  ["qget", qn] -> qget path qn wd `catch` \(e :: SHelperException) -> exceptionText e
-  ["cget", cn] -> cget path cn wd `catch` \(e :: SHelperException) -> exceptionText e
-  ["test", qn, fn] -> test path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> exceptionText e
-  ["show", qn] -> Main.show path qn `catch` \(e :: SHelperException) -> exceptionText e
-  ["print"] -> Main.print path `catch` \(e :: SHelperException) -> exceptionText e
-  ["submit", qn, fn] -> submit path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> exceptionText e
-  ["debug", src, din] -> debug path (T.unpack src) (T.unpack din) wd `catch` \(e :: SHelperException) -> exceptionText e
-  ["result", cn] -> result path cn `catch` \(e :: SHelperException) -> exceptionText e
-  ["stop"] -> stop path `catch` \(e :: SHelperException) -> exceptionText e
-  ["logout"] -> logout path `catch` \(e :: SHelperException) -> exceptionText e
-  _ -> exceptionText (BadData "command error")
+  ["login"] -> login path `catch` \(e :: SHelperException) -> exceptionExit e
+  ("qget":qn) -> qget path qn wd `catch` \(e :: SHelperException) -> exceptionExit e
+  ("cget":cn) -> cget path cn wd `catch` \(e :: SHelperException) -> exceptionExit e
+  ["test", qn, fn] -> test path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> exceptionExit e
+  ["show", qn] -> Main.show path qn `catch` \(e :: SHelperException) -> exceptionExit e
+  ["print"] -> Main.print path `catch` \(e :: SHelperException) -> exceptionExit e
+  ["submit", qn, fn] -> submit path (T.unpack fn) qn wd `catch` \(e :: SHelperException) -> exceptionExit e
+  ["debug", src, din] -> debug path (T.unpack src) (T.unpack din) wd `catch` \(e :: SHelperException) -> exceptionExit e
+  ["result", cn] -> result path cn `catch` \(e :: SHelperException) -> exceptionExit e
+  ["log"] -> Main.log path `catch` \(e :: SHelperException) -> exceptionExit e
+  ["stop"] -> stop path `catch` \(e :: SHelperException) -> exceptionExit e
+  ["logout"] -> logout path `catch` \(e :: SHelperException) -> exceptionExit e
+  _ -> exceptionExit (BadData "command error")
 
 login :: FilePath -> IO ()
 login path = do
@@ -44,19 +45,31 @@ login path = do
  sendServer path (evalSHelper (Login (Username user) (Password pass)))
  TIO.putStrLn "login accept."
 
-qget :: FilePath -> T.Text -> FilePath -> IO ()
+qget :: FilePath -> [T.Text] -> FilePath -> IO ()
 qget path qn wd = do
- (QName res) <- sendServer path (evalSHelper (QGet (QName qn) (Userdir wd)))
- TIO.putStrLn res
+ res <- sendServer path (evalSHelper (QGet ((V.fromList.Prelude.map QName) qn) (Userdir wd)))
+ getResultPrint res
 
-cget :: FilePath -> T.Text -> FilePath -> IO ()
+cget :: FilePath -> [T.Text] -> FilePath -> IO ()
 cget path cn wd = do
- res <- sendServer path (evalSHelper (CGet (CName cn) (Userdir wd)))
- cGetPrint res
-  where
-   cGetPrint :: V.Vector QName -> IO() 
-   cGetPrint qn = if V.null qn then return ()
-                  else case V.head qn of (QName pr) -> TIO.putStrLn pr >> cGetPrint (V.tail qn)
+ res <- sendServer path (evalSHelper (CGet ((V.fromList.Prelude.map CName) cn) (Userdir wd)))
+ getResultPrint res
+
+getResultPrint :: V.Vector GetResult -> IO()
+getResultPrint [] = return ()
+getResultPrint rs = do 
+ case V.head rs of 
+  GetResultOk (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Ok : ", qn, " ."]
+  FromLocal (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Ok : ", qn, " (from local)."]
+  AlreadyGet (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Error : ", qn, " already get."]
+  QuestionNotExist (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Error : ", qn ," not exist."]
+  ContestNotExist (CName cn) -> TIO.putStrLn $ V.foldl1 T.append ["Error : ", cn ," not exist."]
+  Other -> TIO.putStrLn "Error : unknown"
+ getResultPrint (V.tail rs)
+
+cGetPrint :: V.Vector QName -> IO() 
+cGetPrint qn = if V.null qn then return ()
+               else case V.head qn of (QName pr) -> TIO.putStrLn pr >> cGetPrint (V.tail qn)
 
 test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 test path fn qn wd = do
@@ -108,6 +121,49 @@ result path cn = do
  result <- sendServer path (evalSHelper (Result (CName cn)))
  case result of CResult res -> mapM_ (TIO.putStrLn.T.intercalate " ") res
 
+log :: FilePath -> IO()
+log path = do
+ result <- sendServer path (evalSHelper Log)
+ mapM_ logPrint result
+  where
+   logPrint :: RLog -> IO()
+   logPrint (RLog l) = TIO.putStrLn $ case l of
+    (SHelperServerRequest (LoginReq un ps), SHelperOk res) -> "Login : Ok"
+    (SHelperServerRequest (LoginReq un ps), SHelperErr res) -> T.append "Login : Err " $ (fst.exceptionText) res
+    (SHelperServerRequest (QGetReq req (Userdir ud)), SHelperOk res) 
+      -> V.foldl1 T.append ["QGet ", (T.intercalate " ".V.toList.V.map (\(QName a) -> a)) req, " : Ok"]
+    (SHelperServerRequest (QGetReq req (Userdir ud)), SHelperErr res)
+      -> V.foldl1 T.append ["QGet ", (T.intercalate " ".V.toList.V.map (\(QName a) -> a)) req, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (CGetReq req (Userdir ud)), SHelperOk res)
+      -> V.foldl1 T.append  ["CGet ", (T.intercalate " ".V.toList.V.map (\(CName a) -> a)) req, " : Ok"]
+    (SHelperServerRequest (CGetReq req (Userdir ud)), SHelperErr res)
+      -> V.foldl1 T.append  ["CGet ", (T.intercalate " ".V.toList.V.map (\(CName a) -> a)) req, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (TestReq (Source src) (QName qn)), SHelperOk res)
+      -> V.foldl1 T.append ["Test ",T.pack src, " " , qn , " : Ok"]
+    (SHelperServerRequest (TestReq (Source src) (QName qn)), SHelperErr res) 
+      -> V.foldl1 T.append ["Test ",T.pack src, " " , qn , " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (SubmitReq (Source src) (QName qn)), SHelperOk res)
+      -> V.foldl1 T.append ["Submit ",T.pack src, " ", qn, " : Ok"]
+    (SHelperServerRequest (SubmitReq (Source src) (QName qn)), SHelperErr res) 
+      -> V.foldl1 T.append ["Submit ",T.pack src, " ", qn, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (DebugReq (Source src) (DIn din)), SHelperOk res)
+      -> V.foldl1 T.append ["Debug ", T.pack src, " ", T.pack din, " : Ok"]
+    (SHelperServerRequest (DebugReq (Source src) (DIn din)), SHelperErr res)
+      -> V.foldl1 T.append ["Debug ", T.pack src, " ", T.pack din, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest PrintReq, SHelperOk res) -> "Print : Ok"
+    (SHelperServerRequest PrintReq, SHelperErr res) -> T.append "Print : Err " $ (fst.exceptionText) res
+    (SHelperServerRequest (ShowReq (QName qn)), SHelperOk res)
+      -> V.foldl1 T.append ["Show ", qn, " : Ok"]
+    (SHelperServerRequest (ShowReq (QName qn)), SHelperErr res)
+      -> V.foldl1 T.append ["Show ", qn, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (ResultReq (CName cn)), SHelperOk res)
+      -> V.foldl1 T.append ["Result ", cn, " : Ok"]
+    (SHelperServerRequest (ResultReq (CName cn)), SHelperErr res)
+      -> V.foldl1 T.append ["Result ", cn, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest LogoutReq, SHelperOk res) -> "Logout : Ok"
+    (SHelperServerRequest LogoutReq, SHelperErr res) -> T.append "Logout : Err " $ (fst.exceptionText) res
+    _ -> "other."
+
 stop :: FilePath -> IO ()
 stop path = do
  sendServer path (evalSHelper Stop)
@@ -118,15 +174,15 @@ logout path = do
  sendServer path (evalSHelper Logout)
  TIO.putStrLn "logout accept."
 
-exceptionText :: SHelperException -> IO ()
+exceptionExit :: SHelperException -> IO ()
+exceptionExit e = TIO.putStrLn ((fst.exceptionText) e) >> exitWith (ExitFailure ((snd.exceptionText) e))
+
+exceptionText :: SHelperException -> (T.Text, Int)
 exceptionText e = case e of
- FailLogin -> TIO.putStrLn "login failed." >> exitWith (ExitFailure 1)
- AlreadyGet -> TIO.putStrLn "already get." >> exitWith (ExitFailure 2)
- NotExistsContest -> TIO.putStrLn "contest not exist." >> exitWith (ExitFailure 3)
- QuestionNotFound -> TIO.putStrLn "question not found." >> exitWith (ExitFailure 4)
- NotGetQuestion (QName a) -> TIO.putStrLn (T.append "not get : " a) >> exitWith (ExitFailure 5)
- BadData a -> TIO.putStrLn a >> exitWith (ExitFailure 6)
- JsonParseError -> TIO.putStrLn "json parse error." >> exitWith (ExitFailure 7)
- InputErr -> TIO.putStrLn "input error." >> exitWith (ExitFailure 8)
- InternalError -> TIO.putStrLn "internal error." >> exitWith (ExitFailure 9)
- Unknown -> TIO.putStrLn "unknown." >> exitWith (ExitFailure 10)
+ FailLogin -> ("login failed.", 1)
+ NotGetQuestion (QName a) -> (T.append "not get : " a,2)
+ BadData a -> (a, 3)
+ JsonParseError -> ("json parse error.", 4)
+ InputErr -> ("input error.", 4)
+ InternalError -> ("internal error.", 5)
+ Unknown -> ("unknown.", 6)

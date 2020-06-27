@@ -114,6 +114,14 @@ evalSHelper (Result cname) sock = do
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
+evalSHelper Log sock = do
+  sendMsg sock ((toStrict.DA.encode) LogReq) 1024
+  raw <- fromStrict <$> recvMsg sock 1024
+  case DA.decode raw of
+   Just (SHelperOk (LogRes ret)) -> return ret
+   Just (SHelperErr e) -> throwIO e 
+   _ -> throwIO Unknown
+
 evalSHelper Stop sock = do
   sendMsg sock ((toStrict.DA.encode) StopReq) 1024
   raw <- fromStrict <$> recvMsg sock 1024
