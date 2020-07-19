@@ -58,7 +58,7 @@ runServer path server = do
    listen s 1
    return s -- ready
 
-server :: (Socket -> SHelperServerRequest -> IO SHelperServerResponce) -> Socket -> IO Bool
+server :: (Socket -> SHelperServerRequest -> IO SHelperServerResponse) -> Socket -> IO Bool
 server action sock = do
         raw <- fromStrict <$> recvMsg sock 1024
         Prelude.print raw
@@ -74,7 +74,7 @@ server action sock = do
                         sendMsg sock ((toStrict.DA.encode) JsonParseError) 1024
                         return True
 
-actionSHelper :: MVar Contest -> Socket -> SHelperServerRequest -> IO SHelperServerResponce
+actionSHelper :: MVar Contest -> Socket -> SHelperServerRequest -> IO SHelperServerResponse
 actionSHelper contest sock (SHelperServerRequest request) = do
  ret <- requestHandler `catch` \(e :: SHelperException) -> return (SHelperErr e)
                        `catch` \(e :: SomeException) -> return (SHelperErr Unknown)
@@ -84,7 +84,7 @@ actionSHelper contest sock (SHelperServerRequest request) = do
  swapMVar contest $ cnt {rlogs = V.snoc (rlogs cnt) (RLog (SHelperServerRequest req, ret))}
  return ret 
  where
-  requestHandler :: IO SHelperServerResponce
+  requestHandler :: IO SHelperServerResponse
   requestHandler = requestCheck request >>= \case 
    Err msg -> return $ SHelperErr (BadData msg)
    Ok -> case request of 

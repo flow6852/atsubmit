@@ -30,7 +30,7 @@ newtype TOut = TOut T.Text deriving (Show, Eq)
 newtype TAns = TAns T.Text deriving (Show, Eq)
 newtype Message = Message T.Text deriving (Show, Eq)
 newtype CResult = CResult [[T.Text]] deriving (Show, Eq)
-newtype RLog = RLog (SHelperServerRequest, SHelperServerResponce) deriving (Show, Eq)
+newtype RLog = RLog (SHelperServerRequest, SHelperServerResponse) deriving (Show, Eq)
 data GetResult = GetResultOk QName 
                | FromLocal QName
                | AlreadyGet QName
@@ -92,7 +92,7 @@ data SHelperRequest
         deriving(Show, Eq)
 
 -- サーバからの最終レスポンス. "tag"でjsonの形式を切り替える.
-data SHelperResponce
+data SHelperResponse
         = LoginRes ()
         | QGetRes (V.Vector GetResult)
         | CGetRes (V.Vector GetResult)
@@ -108,7 +108,7 @@ data SHelperResponce
         deriving (Show, Eq)
 
 newtype SHelperServerRequest = SHelperServerRequest SHelperRequest deriving (Show, Eq)
-data SHelperServerResponce = SHelperOk SHelperResponce | SHelperErr SHelperException deriving (Show, Eq)
+data SHelperServerResponse = SHelperOk SHelperResponse | SHelperErr SHelperException deriving (Show, Eq)
 
 data SHelperException
         = FailLogin
@@ -172,10 +172,10 @@ deriveJSON defaultOptions ''Question
 deriveJSON defaultOptions ''Sizes
 deriveJSON defaultOptions ''RLog
 deriveJSON defaultOptions ''GetResult
-deriveJSON defaultOptions ''SHelperResponce
+deriveJSON defaultOptions ''SHelperResponse
 deriveJSON defaultOptions ''SHelperRequest
 deriveJSON defaultOptions ''SHelperServerRequest
-deriveJSON defaultOptions ''SHelperServerResponce
+deriveJSON defaultOptions ''SHelperServerResponse
 deriveJSON defaultOptions ''SHelperException
 deriveJSON defaultOptions ''TestBodyRes
 deriveJSON defaultOptions ''DebugBodyRes
