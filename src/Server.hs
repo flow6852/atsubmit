@@ -61,9 +61,13 @@ runServer path server = do
 server :: (Socket -> SHelperServerRequest -> IO SHelperServerResponce) -> Socket -> IO Bool
 server action sock = do
         raw <- fromStrict <$> recvMsg sock 1024
+        Prelude.print raw
         case DA.decode raw of
                 Just request -> do
                         response <- action sock request
+                        Prelude.print request
+                        Prelude.print response
+                        Prelude.print ((toStrict.DA.encode) response)
                         sendMsg sock ((toStrict.DA.encode) response) 1024
                         return $ response /= SHelperOk (StopRes ())
                 Nothing -> do 
@@ -161,9 +165,9 @@ evalSHelper mvcont (Login (Username user) (Password pass)) = do
  let csrf_tkn = scrapingCsrfToken fstres
  let fstcke = getResponseHeader hSetCookie fstres
  response <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", user), ("password", pass), ("csrf_token", csrf_tkn)]
- when ((checkFailLogin.getResponseBody) response) $ createContest V.empty [] [] >>= \x -> putMVar mvcont x >> throwIO FailLogin
+ when ((checkFailLogin.getResponseBody) response) $ createContest V.empty [] [] >>= \x -> swapMVar mvcont x >> throwIO FailLogin
 
- createContest V.empty (getResponseHeader hSetCookie response) csrf_tkn >>= \x -> putMVar mvcont x
+ createContest V.empty (getResponseHeader hSetCookie response) csrf_tkn >>= \x -> swapMVar mvcont x
  return ()
  where
   checkFailLogin :: BSL.ByteString -> Bool

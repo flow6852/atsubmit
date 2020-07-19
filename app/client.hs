@@ -59,8 +59,8 @@ getResultPrint :: V.Vector GetResult -> IO()
 getResultPrint [] = return ()
 getResultPrint rs = do 
  case V.head rs of 
-  GetResultOk (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Ok : ", qn, " ."]
-  FromLocal (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Ok : ", qn, " (from local)."]
+  GetResultOk (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Ok : ", qn, "."]
+  FromLocal (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Ok (from local): ", qn, "."]
   AlreadyGet (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Error : ", qn, " already get."]
   QuestionNotExist (QName qn) -> TIO.putStrLn $ V.foldl1 T.append ["Error : ", qn ," not exist."]
   ContestNotExist (CName cn) -> TIO.putStrLn $ V.foldl1 T.append ["Error : ", cn ," not exist."]
@@ -180,7 +180,7 @@ exceptionExit e = TIO.putStrLn ((fst.exceptionText) e) >> exitWith (ExitFailure 
 exceptionText :: SHelperException -> (T.Text, Int)
 exceptionText e = case e of
  FailLogin -> ("login failed.", 1)
- NotGetQuestion (QName a) -> (T.append "not get : " a,2)
+ NotGetQuestion (QName a) -> (T.append "don't get : " a,2)
  BadData a -> (a, 3)
  JsonParseError -> ("json parse error.", 4)
  InputErr -> ("input error.", 4)
