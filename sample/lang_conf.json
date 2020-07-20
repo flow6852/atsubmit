@@ -7,7 +7,7 @@
 			"docker_image": "atsubmit_hs",
 			"compile": "stack ghc -o ./a.out -O2 ./Main.hs",
 			"exec": "./a.out",
-			"langid": "3014" 
+			"langid": "4027" 
 		},
 		{
 			"name": "rust",
@@ -16,7 +16,7 @@
 			"docker_image": "atsubmit_rs",
 			"compile": "rustc -O -o ./a.out ./Main.rs",
 			"exec": "./a.out",
-			"langid": "3504"
+			"langid": "4050"
 		}
 	]
 }
