@@ -167,7 +167,7 @@ evalSHelper mvcont (Login (Username user) (Password pass)) = do
  response <- postRequestWrapper "https://atcoder.jp/login" fstcke [ ("username", user), ("password", pass), ("csrf_token", csrf_tkn)]
  when ((checkFailLogin.getResponseBody) response) $ createContest V.empty [] [] >>= \x -> swapMVar mvcont x >> throwIO FailLogin
 
- createContest V.empty (getResponseHeader hSetCookie response) csrf_tkn >>= \x -> swapMVar mvcont x
+ swapMVar mvcont $ contest {cookie = getResponseHeader hSetCookie response, csrf_token = csrf_tkn}
  return ()
  where
   checkFailLogin :: BSL.ByteString -> Bool
