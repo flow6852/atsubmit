@@ -86,7 +86,7 @@ show path qn = do
    showPrint (x:xs) = do
     TIO.putStrLn "===== input ====="
     TIO.putStrLn $ fst x
-    TIO.putStrLn "===== putput ====="
+    TIO.putStrLn "===== output ====="
     TIO.putStrLn $ snd x
     showPrint xs
 
