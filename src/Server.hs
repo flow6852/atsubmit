@@ -118,6 +118,9 @@ actionSHelper contest sock (SHelperServerRequest request) = do
         LogReq -> do
                 result <- evalSHelper contest Log
                 return $ SHelperOk (LogRes result)
+        LangIdReq lang -> do
+                result <- evalSHelper contest (LangId lang)
+                return $ SHelperOk (LangIdRes result)
         StopReq -> do
                 result <- evalSHelper contest Stop
                 return $ SHelperOk (StopRes result)
@@ -151,6 +154,7 @@ requestCheck (ShowReq qname) = return Ok
 requestCheck (ResultReq (CName "")) = return $ Err "don't set contest name."
 requestCheck (ResultReq cname) = return Ok
 requestCheck LogReq = return Ok
+requestCheck (LangIdReq _) = return Ok
 requestCheck StopReq = return Ok
 requestCheck LogoutReq = return Ok
 
@@ -299,6 +303,21 @@ evalSHelper mvcont Log = do
  contest <- readMVar mvcont
  return $ rlogs contest
 
+evalSHelper mvcont (LangId (Lang lang)) = do
+ contest <- readMVar mvcont
+ res <- getRequestWrapper "https://atcoder.jp/contests/practice/submit" (cookie contest)
+ let langids = (getIds.fromDocument.parseLBS.getResponseBody) res
+ if T.null lang then return langids
+                else return $ V.filter (\(LanguageId (_, Lang x)) -> T.isInfixOf lang ((L.head.T.words) x)) langids
+ where
+  getIds :: Cursor -> V.Vector LanguageId
+  getIds cursor = do
+   let raw = cursor $// attributeIs "id" "select-lang" &// element "option"
+   let options = L.take (L.length raw) raw
+   V.fromList $ L.zipWith (\a b -> LanguageId (Id a, Lang b))
+                          (L.concatMap (attribute "value") options)
+                          ((L.map nToContent.L.concatMap (TX.elementNodes.nToE.node)) options) 
+
 evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
  res <- postRequestWrapper "https://atcoder.jp/logout" (cookie contest) [("csrf_token", csrf_token contest)]
@@ -357,3 +376,8 @@ cookieCsrfToken = decodeUtf8.(\case
  Just a -> BSC.drop 11 a).L.find (\x -> BSC.pack "csrf_token"== BSC.take 10 x).BSC.split '\NUL'.NUE.decodeByteString
 -- getCsrfToken :: T.Text -> T.Text
 -- getCsrfToken = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") 
+--
+nToE :: TX.Node -> TX.Element
+nToE (TX.NodeElement e) = e
+nToContent :: TX.Node -> T.Text
+nToContent (TX.NodeContent t) = t

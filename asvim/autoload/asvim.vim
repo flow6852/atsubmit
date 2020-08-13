@@ -139,6 +139,13 @@ function! asvim#AtLogout(...) " AtLogout
 	wincmd k
 endfunction
 
+function! asvim#AtLog(...) " AtLog
+	let cmd = "atsubmit-client log"
+	copen
+	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
+	wincmd k
+endfunction
+
 function! asvim#AtStop(...) " AtStop
 	let cmd = "atsubmit-client stop"
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})

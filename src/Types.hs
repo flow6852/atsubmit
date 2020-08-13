@@ -31,6 +31,9 @@ newtype TAns = TAns T.Text deriving (Show, Eq)
 newtype Message = Message T.Text deriving (Show, Eq)
 newtype CResult = CResult [[T.Text]] deriving (Show, Eq)
 newtype RLog = RLog (SHelperServerRequest, SHelperServerResponse) deriving (Show, Eq)
+newtype Lang = Lang T.Text deriving (Show, Eq)
+newtype Id = Id T.Text deriving (Show, Eq)
+newtype LanguageId = LanguageId (Id, Lang) deriving (Show, Eq)
 data GetResult = GetResultOk QName 
                | FromLocal QName
                | AlreadyGet QName
@@ -71,7 +74,8 @@ data SHelper a where
         Print  :: SHelper (V.Vector QName) -- ContestStateのQuestionsのすべてを返す.
         Show   :: QName -> SHelper QIO -- 問題を受け取ってその問題入出力を返す.
         Result :: CName -> SHelper CResult -- コンテストを受け取ってコンテストの結果を出力する.
-        Log    :: SHelper (V.Vector RLog)
+        Log    :: SHelper (V.Vector RLog) -- ログの出力
+        LangId :: Lang -> SHelper (V.Vector LanguageId) -- data.LanguageIdの表示
         Stop   :: SHelper ()
         Logout :: SHelper ()
 
@@ -87,6 +91,7 @@ data SHelperRequest
         | ShowReq QName
         | ResultReq CName
         | LogReq 
+        | LangIdReq Lang
         | StopReq
         | LogoutReq
         deriving(Show, Eq)
@@ -103,6 +108,7 @@ data SHelperResponse
         | ShowRes QIO
         | ResultRes CResult
         | LogRes (V.Vector RLog)
+        | LangIdRes (V.Vector LanguageId)
         | StopRes ()
         | LogoutRes ()
         deriving (Show, Eq)
@@ -172,6 +178,9 @@ deriveJSON defaultOptions ''Question
 deriveJSON defaultOptions ''Sizes
 deriveJSON defaultOptions ''RLog
 deriveJSON defaultOptions ''GetResult
+deriveJSON defaultOptions ''Id
+deriveJSON defaultOptions ''Lang
+deriveJSON defaultOptions ''LanguageId
 deriveJSON defaultOptions ''SHelperResponse
 deriveJSON defaultOptions ''SHelperRequest
 deriveJSON defaultOptions ''SHelperServerRequest

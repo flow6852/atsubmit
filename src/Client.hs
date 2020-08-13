@@ -122,6 +122,14 @@ evalSHelper Log sock = do
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 
+evalSHelper (LangId lang) sock = do
+ sendMsg sock ((toStrict.DA.encode) (LangIdReq lang)) 1024
+ raw <- fromStrict <$> recvMsg sock 1024
+ case DA.decode raw of
+  Just (SHelperOk (LangIdRes lid)) -> return lid
+  Just (SHelperErr e) -> throwIO e 
+  _ -> throwIO Unknown
+
 evalSHelper Stop sock = do
   sendMsg sock ((toStrict.DA.encode) StopReq) 1024
   raw <- fromStrict <$> recvMsg sock 1024

@@ -35,6 +35,8 @@ main = do
   ["debug", src, din] -> debug path (T.unpack src) (T.unpack din) wd `catch` \(e :: SHelperException) -> exceptionExit e
   ["result", cn] -> result path cn `catch` \(e :: SHelperException) -> exceptionExit e
   ["log"] -> Main.log path `catch` \(e :: SHelperException) -> exceptionExit e
+  ["langid"] -> Main.langid path T.empty `catch` \(e :: SHelperException) -> exceptionExit e
+  ["langid", lang] -> Main.langid path lang `catch` \(e :: SHelperException) -> exceptionExit e
   ["stop"] -> stop path `catch` \(e :: SHelperException) -> exceptionExit e
   ["logout"] -> logout path `catch` \(e :: SHelperException) -> exceptionExit e
   _ -> exceptionExit (BadData "command error")
@@ -163,6 +165,12 @@ log path = do
     (SHelperServerRequest LogoutReq, SHelperOk res) -> "Logout : Ok"
     (SHelperServerRequest LogoutReq, SHelperErr res) -> T.append "Logout : Err " $ (fst.exceptionText) res
     _ -> "other."
+
+langid :: FilePath -> T.Text -> IO ()
+langid path lang = do
+ langids <- sendServer path (evalSHelper (LangId (Lang lang)))
+ TIO.putStrLn "Language, Id"
+ mapM_ (TIO.putStrLn.(\(LanguageId (Id a, Lang b)) -> V.foldl1 T.append [b, ", ", a])) langids
 
 stop :: FilePath -> IO ()
 stop path = do
