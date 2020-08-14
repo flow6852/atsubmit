@@ -110,7 +110,8 @@ submit path fn qn wd = do
 
 debug :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
 debug path src din wd = do
- res <- sendServer path (evalSHelper (Types.Debug (Source (wd ++ ('/':src))) (DIn (wd ++ ('/':din)))))
+ debugin <- (\x -> if x then din else wd ++ ('/':din)) <$> doesFileExist din
+ res <- sendServer path (evalSHelper (Types.Debug (Source (wd ++ ('/':src))) (DIn debugin)))
  case res of
   DAC (DOut dout) -> TIO.putStrLn dout
   DCE (Message message) -> TIO.putStrLn message

@@ -10,17 +10,17 @@ function! asvim#AtQGet(...) "AtQGet question
 	if a:0 != 1
 		let cmd = "echo \"error :: command is \"AtQGet [question name] \" \""
         else
-		let cmd = "atsubmit-client qget " . join(a, " ") # . "; echo $?"
-                # let getpage = systemlist(cmd)
-		# let status = str2nr(getpage[len(getpage)-1])
-		# if status != 0
-		# 	let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
-		# else
-                # 
-		# 	echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
-		# 	call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
-		# 	let cmd = "echo " . a:1
-		# endif
+		let cmd = "atsubmit-client qget " . join(a:000, " ")
+                " let getpage = systemlist(cmd)
+		" let status = str2nr(getpage[len(getpage)-1])
+		" if status != 0
+		" 	let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
+		" else
+                " 
+		" 	echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
+		" 	call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
+		" 	let cmd = "echo " . a:1
+		" endif
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
@@ -31,16 +31,16 @@ function! asvim#AtCGet(...) "AtCGet contest
 	if a:0 != 1
 		let cmd = "echo \"error :: command is \"AtCGet [contest name] \" \""
         else
-		let cmd = "atsubmit-client cget " . join(a, " ") # . "; echo $?"
-                # let getpage = systemlist(cmd)
-		# let status = str2nr(getpage[len(getpage)-1])
-		# if status != 0
-		# 	let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
-		# else
-		# 	echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
-		# 	call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
-		# 	let cmd = "echo " . a:1
-		# endif
+		let cmd = "atsubmit-client cget " . join(a:000, " ")
+                " let getpage = systemlist(cmd)
+		" let status = str2nr(getpage[len(getpage)-1])
+		" if status != 0
+		" 	let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
+		" else
+		" 	echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
+		" 	call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
+		" 	let cmd = "echo " . a:1
+		" endif
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})

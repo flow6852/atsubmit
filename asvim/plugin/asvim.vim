@@ -5,8 +5,8 @@ endif
 let g:l_asvim = 1
 
 command! -nargs=* AtStart call asvim#AtStart(<f-args>) 
-command! -nargs=* AtGet call asvim#AtCGet(<f-args>)
-command! -nargs=* AtGet call asvim#AtQGet(<f-args>)
+command! -nargs=* AtCGet call asvim#AtCGet(<f-args>)
+command! -nargs=* AtQGet call asvim#AtQGet(<f-args>)
 command! -nargs=* AtShow call asvim#AtShow(<f-args>)
 command! -nargs=* AtSubmit call asvim#AtSubmit(<f-args>)
 command! -nargs=* AtTest call asvim#AtTest(<f-args>)
