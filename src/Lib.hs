@@ -27,6 +27,7 @@ import Turtle
 import Turtle.Line
 import qualified Control.Foldl as CF
 import Control.Concurrent.Timeout
+import Text.XML.Cursor
 
 langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
@@ -138,7 +139,7 @@ checkResult _ _             = False
 
 useDockerTest :: Maybe T.Text -> Contest -> T.Text -> IO (Maybe Int)
 useDockerTest (Just image) contest main = do
- shell (V.foldl1 T.append ["docker create --name atsubmit_run --pids-limit 10 --network \"none\" ", image]) Turtle.empty
+ shell (V.foldl1 T.append ["docker create --name atsubmit_run --pids-limit 100 --network none ", image]) Turtle.empty
  shell (V.foldl1 T.append ["docker cp ", main_file contest, " atsubmit_run:/home/", main]) Turtle.empty
  shell (V.foldl1 T.append ["docker cp ", input_file contest, " atsubmit_run:/home/input.txt"]) Turtle.empty
  shell "docker start atsubmit_run" Turtle.empty
@@ -170,3 +171,6 @@ unUseDocker _ _ _ _ = return Nothing
 
 rmFile :: System.IO.FilePath -> IO()
 rmFile path = doesFileExist path >>= \x -> when x (removeFile path)
+
+scrapeNodes curs = case child curs of []    -> Prelude.filter (not.T.isInfixOf "\n") $ content curs
+                                      next  -> L.concatMap scrapeNodes next

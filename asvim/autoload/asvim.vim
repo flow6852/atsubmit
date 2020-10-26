@@ -104,25 +104,26 @@ function! asvim#AtDebug(...) "AtDebug
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
 	wincmd k
+        call delete(tmp)
 endfunction
 
 function! asvim#AtLogin(...) "AtLogin
-        let user = inputdialog("username > ")
-        let pass = inputdialog("password > ")
-        call add(user, pass)
+        let txt = []
+        call add(txt, inputdialog("username > "))
+        call add(txt, inputdialog("password > "))
         let tmp = tempname()
-        call writefile(user, tmp)
-	let cmd = "atsubmit-client login < " tmp
-        call delete(tmp)
+        call writefile(txt, tmp)
+	let cmd = "atsubmit-client login < " . tmp
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
 	wincmd k
+        call delete(tmp)
 endfunction
 
 function! asvim#AtResult(...) "AtResult question
 	if a:0 == 0
 		let cmd = "atsubmit-client result"
-	elseif
+        elseif a:0 == 1
 		let cmd = "atsubmit-client result " . a:1 
 	else 
 		let cmd = "echo \"error :: command is \"AtResult [ , question name] \" \""

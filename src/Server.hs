@@ -270,29 +270,8 @@ evalSHelper mvcont (Result (CName cn)) = do
  return $ CResult $ result.fromDocument.parseLBS.getResponseBody $ res
   where
    result :: Cursor -> [[T.Text]]
-   result cursor = do
-    let subtime = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
-                                                                             &// attributeIs "class" "fixtime fixtime-second"
-        c = Prelude.concatMap content.lineNGet (cOrP cursor).Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
-                                                                                              &// element "td"
-                                                                                              &// element "a" -- [question, uname, details]
-        result = Prelude.concatMap content.Prelude.concatMap child $ cursor $// attributeIs "class" "table-responsive"
-                                                                            &// element "td"
-                                                                            &// attributeIs "aria-hidden" "true"
-    zipLines subtime c result
-   cOrP :: Cursor -> Int 
-   cOrP cs = do
-    let ch = cs $// attributeIs "class" "table-responsive"
-                &// element "td"
-                &// attributeIs "class" "glyphicon glyphicon-search black"
-    if Prelude.null ch then 3 else 4
-   lineNGet :: Int -> [Cursor] -> [Cursor]
-   -- in contest, lineNGet 3 list else lineNGet 4
-   lineNGet k l = if Prelude.length l >= k then Prelude.head l:lineNGet k (Prelude.drop k l) else [] 
-   zipLines :: [T.Text] -> [T.Text] -> [T.Text] -> [[T.Text]]
-   zipLines [] [] [] = [] 
-   zipLines [s] [c] [r] = [[s, c, r]]
-   zipLines (s:t) (c:n) (r:e) = [s, c, r]:zipLines t n e
+   result cursor = Prelude.map ((Prelude.filter (not.T.isInfixOf "\n").Prelude.concatMap scrapeNodes).child) $ cursor $// attributeIs "class" "table-responsive"
+                                                                                                                      &// element "tr"
 
 evalSHelper mvcont Stop = do
  contest <- readMVar mvcont
@@ -364,20 +343,22 @@ ioZip (i:o:lists)
  | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
  | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
  | otherwise                                                                = (i, o):ioZip lists
+
 chnl :: T.Text -> T.Text
 chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
+
 rewriteHtml :: T.Text -> T.Text
-rewriteHtml = T.replace "/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn"
+rewriteHtml = T.replace "//img.atcoder.jp/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn" -- todo :: jquery
+
 ajax = "https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" 
 
 cookieCsrfToken :: BSC.ByteString -> T.Text
 cookieCsrfToken = decodeUtf8.(\case
  Nothing -> ""
  Just a -> BSC.drop 11 a).L.find (\x -> BSC.pack "csrf_token"== BSC.take 10 x).BSC.split '\NUL'.NUE.decodeByteString
--- getCsrfToken :: T.Text -> T.Text
--- getCsrfToken = T.replace "&#43;" "+".T.takeWhile (/= '\"').snd.T.breakOnEnd (T.pack "value=\"") 
---
+
 nToE :: TX.Node -> TX.Element
 nToE (TX.NodeElement e) = e
+
 nToContent :: TX.Node -> T.Text
 nToContent (TX.NodeContent t) = t
