@@ -172,5 +172,5 @@ unUseDocker _ _ _ _ = return Nothing
 rmFile :: System.IO.FilePath -> IO()
 rmFile path = doesFileExist path >>= \x -> when x (removeFile path)
 
-scrapeNodes curs = case child curs of []    -> Prelude.filter (not.T.isInfixOf "\n") $ content curs
+scrapeNodes curs = case child curs of []    -> content curs
                                       next  -> L.concatMap scrapeNodes next

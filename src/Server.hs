@@ -318,7 +318,6 @@ getContestInfo (CName cn) userdir contest = getRequestWrapper contesturl (cookie
 
 getPageInfo :: QName -> FilePath -> Contest -> IO (GetResult, Question)
 getPageInfo (QName qn) userdir contest = 
--- if V.elem questurl ((V.map qurl.questions) contest) then return (AlreadyGet (QName qn), nullQuestion)
  if V.elem qn (V.map (T.takeWhileEnd (/='/').qurl) (questions contest)) then return (AlreadyGet (QName qn),nullQuestion)
  else doesFileExist fname >>= \fcheck -> 
   if fcheck then Text.HTML.DOM.readFile fname >>= \res -> return (FromLocal (QName qn), newQuest res)
@@ -335,8 +334,16 @@ getPageInfo (QName qn) userdir contest =
 
 questionIO :: Cursor -> V.Vector (T.Text, T.Text)
 questionIO cursor = do
- let cs = Prelude.map child $ cursor $// attributeIs "class" "col-sm-12" &// element "section" &// element "pre" 
- V.fromList.ioZip $ Prelude.map chnl.Prelude.concatMap content $ Prelude.concat.Prelude.tail $ cs
+ let cs = Prelude.map changeNewLine.Prelude.concatMap scrapeNodes $ cursor $// attributeIs "id" "task-statement"
+                                                                           &// attributeIs "class" "lang-ja"
+                                                                           &/  attributeIs "class" "part"
+                                                                           &/  element "section"
+                                                                           &/  element "pre"
+ V.fromList.zipIOFromList $ cs
+
+zipIOFromList :: [T.Text] -> [(T.Text, T.Text)]
+zipIOFromList (i:o:lists) = (i,o):zipIOFromList lists
+zipIOFromList []          = []
 
 ioZip :: [T.Text] -> [(T.Text, T.Text)]
 ioZip (i:o:lists) 
@@ -344,8 +351,8 @@ ioZip (i:o:lists)
  | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
  | otherwise                                                                = (i, o):ioZip lists
 
-chnl :: T.Text -> T.Text
-chnl = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
+changeNewLine :: T.Text -> T.Text
+changeNewLine = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
 
 rewriteHtml :: T.Text -> T.Text
 rewriteHtml = T.replace "//img.atcoder.jp/public/js/lib/jquery-1.9.1.min.js" ajax.T.replace "//cdn" "https://cdn" -- todo :: jquery
