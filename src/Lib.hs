@@ -28,6 +28,7 @@ import Turtle.Line
 import qualified Control.Foldl as CF
 import Control.Concurrent.Timeout
 import Text.XML.Cursor
+import Text.XML
 
 langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
@@ -36,7 +37,7 @@ cookieFile = "/.cache/atsubmit/cookie"
 nullContest = Contest { questions = [], cookie = [], csrf_token = "",rlogs = [], homedir = "", main_file = ""
                       , input_file = "", compile_file = "", output_file = ""}
 
-nullQuestion = Question { qurl = "", qio = []}
+nullQuestion = Question { qurl = "", qsentence = "", qrestriction = [], qio = ("", ""), qiosample = []}
 
 nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_image = Nothing
                         , compile = Nothing, exec = Nothing, langid = ""}
@@ -49,8 +50,8 @@ createContest q c t = getHomeDirectory >>= \d ->
                                      , compile_file = T.append (T.pack d) "/.cache/atsubmit/src/comp.txt"
                                      , output_file = T.append (T.pack d) "/.cache/atsubmit/src/outres.txt"}
 
-createQuestion :: T.Text -> V.Vector (T.Text, T.Text) -> Question
-createQuestion url io = Question { qurl = url, qio = io}
+createQuestion :: T.Text -> T.Text -> V.Vector T.Text -> (T.Text, T.Text) -> V.Vector (T.Text, T.Text) -> Question
+createQuestion url sentence restriction io iosample = Question { qurl = url, qsentence = sentence, qrestriction = restriction, qio = io, qiosample = iosample}
 
 getAtKeys :: IO [String]
 getAtKeys = do
@@ -174,3 +175,9 @@ rmFile path = doesFileExist path >>= \x -> when x (removeFile path)
 
 scrapeNodes curs = case child curs of []    -> content curs
                                       next  -> L.concatMap scrapeNodes next
+
+scrapeNodeWithLaTeX curs = case node curs of NodeElement e -> if ((=="var").nameLocalName.elementName) e then L.concatMap snocons (child curs)
+                                                                                                         else L.concatMap (scrapeNodeWithLaTeX.fromNode) (elementNodes e)
+                                             _             -> content curs
+ where
+  snocons = L.map ((\x -> T.snoc x '$').T.cons '$').content

@@ -80,17 +80,30 @@ test path fn qn wd = do
 
 show :: FilePath -> T.Text -> IO ()
 show path qn = do
- (QIO res) <- sendServer path (evalSHelper (Show (QName qn)))
- showPrint $ V.toList res
+ res <- sendServer path (evalSHelper (Show (QName qn)))
+ showPrint res
   where
-   showPrint :: [(T.Text, T.Text)] -> IO ()
-   showPrint [] = return ()
-   showPrint (x:xs) = do
+   showPrint :: Question -> IO ()
+   showPrint quest = do
+    TIO.putStrLn "===== url ====="
+    TIO.putStrLn $ qurl quest
+    TIO.putStrLn "===== question ====="
+    TIO.putStrLn $ qsentence quest
+    TIO.putStrLn "===== restriction ====="
+    mapM_ TIO.putStrLn $ qrestriction quest
+    TIO.putStrLn "===== input style ====="
+    TIO.putStrLn $ fst.qio $ quest
+    TIO.putStrLn "===== output style ====="
+    TIO.putStrLn $ snd.qio $ quest
+    TIO.putStrLn "=== input and output sample"
+    showPrintSamples.V.toList $ qiosample quest
+   showPrintSamples [] = return ()
+   showPrintSamples (x:xs) = do
     TIO.putStrLn "===== input ====="
     TIO.putStrLn $ fst x
     TIO.putStrLn "===== output ====="
     TIO.putStrLn $ snd x
-    showPrint xs
+    showPrintSamples xs
 
 print :: FilePath -> IO ()
 print path = do

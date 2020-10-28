@@ -102,7 +102,7 @@ evalSHelper (Show qname) sock = do
   sendMsg sock ((toStrict.DA.encode) (ShowReq qname)) 1024
   raw <- fromStrict <$> recvMsg sock 1024
   case DA.decode raw of
-   Just (SHelperOk (ShowRes qio)) -> return qio
+   Just (SHelperOk (ShowRes question)) -> return question
    Just (SHelperErr e) -> throwIO e 
    _ -> throwIO Unknown
 

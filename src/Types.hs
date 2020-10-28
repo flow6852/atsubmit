@@ -43,7 +43,10 @@ data GetResult = GetResultOk QName
                deriving (Show, Eq)
 
 data Question = Question { qurl :: T.Text
-                         , qio  :: V.Vector (T.Text, T.Text)
+                         , qsentence :: T.Text
+                         , qrestriction :: V.Vector T.Text
+                         , qio :: (T.Text, T.Text)
+                         , qiosample  :: V.Vector (T.Text, T.Text)
                          } deriving (Show, Eq)
 
 data Contest = Contest { questions :: V.Vector Question 
@@ -72,7 +75,7 @@ data SHelper a where
         Submit :: Source -> QName -> SHelper () -- ファイルと問題名を受け取って提出する.
         Debug  :: Source -> DIn -> SHelper DebugBodyRes -- ファイルと入力を受け取って出力を返す.
         Print  :: SHelper (V.Vector QName) -- ContestStateのQuestionsのすべてを返す.
-        Show   :: QName -> SHelper QIO -- 問題を受け取ってその問題入出力を返す.
+        Show   :: QName -> SHelper Question -- 問題を受け取ってその問題入出力を返す.
         Result :: CName -> SHelper CResult -- コンテストを受け取ってコンテストの結果を出力する.
         Log    :: SHelper (V.Vector RLog) -- ログの出力
         LangId :: Lang -> SHelper (V.Vector LanguageId) -- data.LanguageIdの表示
@@ -105,7 +108,7 @@ data SHelperResponse
         | SubmitRes ()
         | DebugRes DebugBodyRes
         | PrintRes (V.Vector QName)
-        | ShowRes QIO
+        | ShowRes Question
         | ResultRes CResult
         | LogRes (V.Vector RLog)
         | LangIdRes (V.Vector LanguageId)

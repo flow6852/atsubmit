@@ -203,7 +203,7 @@ evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
  copyFile source ((T.unpack.main_file) contest)
  let mquest = V.find ((== qn).T.takeWhileEnd (/='/').qurl) $ questions contest
  case mquest of Nothing -> throwIO $ NotGetQuestion (QName qn) -- not getting
-                Just a  -> testLoop contest (qio a) func (T.append "Main." ((V.head.extention) lang))
+                Just a  -> testLoop contest (qiosample a) func (T.append "Main." ((V.head.extention) lang))
                             `catch` \(e :: SHelperException) -> throwIO e
  where
   testLoop :: Contest -> V.Vector (T.Text, T.Text) -> (T.Text -> IO (Maybe Int)) -> T.Text -> IO ()
@@ -259,9 +259,7 @@ evalSHelper mvcont (Show (QName qn)) = do
  contest <- readMVar mvcont
  let mquest = V.find ((== qn).T.takeWhileEnd (/='/').qurl) $ questions contest
  case mquest of Nothing -> throwIO $ NotGetQuestion (QName qn)
-                Just a  -> do
-                           let qios = qio a
-                           return $ QIO qios
+                Just a  -> return a
 
 evalSHelper mvcont (Result (CName cn)) = do
  contest <- readMVar mvcont
@@ -325,18 +323,34 @@ getPageInfo (QName qn) userdir contest =
    if getResponseStatus res /= status200 then return (QuestionNotExist (QName qn), nullQuestion)
    else do
     TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)
-    let quest = createQuestion questurl ((questionIO.fromDocument.parseLBS.getResponseBody) res)
     return (GetResultOk (QName qn), (newQuest.parseLBS.getResponseBody) res)
  where
   questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", T.takeWhile (/='_') qn, "/tasks/", qn]
   fname = T.unpack (V.foldl1 T.append [T.pack userdir, "/", qn, ".html"])
-  newQuest raw = createQuestion questurl ((questionIO.fromDocument) raw)
+  newQuest raw = do
+   let base = Prelude.head $ fromDocument raw $// attributeIs "class" "lang-ja"
+       qsent = questionSentence base
+       qrest = questionRestrict base
+       qinputoutput = questionIO base
+       qiosample = questionIOsample base
+   createQuestion questurl qsent qrest qinputoutput qiosample
 
-questionIO :: Cursor -> V.Vector (T.Text, T.Text)
+questionSentence :: Cursor -> T.Text
+questionSentence = L.foldl1 T.append.L.concatMap scrapeNodeWithLaTeX.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head.(\x -> x  $// attributeIs "class" "part")
+
+questionRestrict :: Cursor -> V.Vector T.Text
+questionRestrict = V.fromList.L.map (T.concat.scrapeNodeWithLaTeX).L.concatMap (\x -> x $// element "li").child.(!!1).(\x -> x $// attributeIs "class" "part")
+
+questionIO :: Cursor -> (T.Text, T.Text)
 questionIO cursor = do
- let cs = Prelude.map changeNewLine.Prelude.concatMap scrapeNodes $ cursor $// attributeIs "id" "task-statement"
-                                                                           &// attributeIs "class" "lang-ja"
-                                                                           &/  attributeIs "class" "part"
+ let io = cursor $// attributeIs "class" "io-style" &// attributeIs "class" "part"
+     inp = L.foldl1 T.append.L.intercalate ["\n"].L.map scrapeNodeWithLaTeX.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head $ io 
+     outp = L.foldl1 T.append.L.intercalate ["\n"].L.map scrapeNodeWithLaTeX.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.last $ io 
+ (inp, outp)
+
+questionIOsample :: Cursor -> V.Vector (T.Text, T.Text)
+questionIOsample cursor = do
+ let cs = Prelude.map changeNewLine.Prelude.concatMap scrapeNodes $ cursor $/ attributeIs "class" "part"
                                                                            &/  element "section"
                                                                            &/  element "pre"
  V.fromList.zipIOFromList $ cs
@@ -345,11 +359,8 @@ zipIOFromList :: [T.Text] -> [(T.Text, T.Text)]
 zipIOFromList (i:o:lists) = (i,o):zipIOFromList lists
 zipIOFromList []          = []
 
-ioZip :: [T.Text] -> [(T.Text, T.Text)]
-ioZip (i:o:lists) 
- | T.null i || T.singleton '\n' == i ||  T.null o || T.singleton '\n' == o  = []
- | Prelude.null lists || (T.null.Prelude.head) lists                        = [(i, o)] 
- | otherwise                                                                = (i, o):ioZip lists
+rmnl :: T.Text -> T.Text
+rmnl = T.replace "\r\n" ""
 
 changeNewLine :: T.Text -> T.Text
 changeNewLine = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")
