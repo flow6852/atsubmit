@@ -336,16 +336,16 @@ getPageInfo (QName qn) userdir contest =
    createQuestion questurl qsent qrest qinputoutput qiosample
 
 questionSentence :: Cursor -> T.Text
-questionSentence = L.foldl1 T.append.L.concatMap scrapeNodeWithLaTeX.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head.(\x -> x  $// attributeIs "class" "part")
+questionSentence = rmnl.T.replace "。" "。\n".L.foldl1 T.append.L.concatMap snwl.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head.(\x -> x $// attributeIs "class" "part")
 
 questionRestrict :: Cursor -> V.Vector T.Text
-questionRestrict = V.fromList.L.map (T.concat.scrapeNodeWithLaTeX).L.concatMap (\x -> x $// element "li").child.(!!1).(\x -> x $// attributeIs "class" "part")
+questionRestrict = V.fromList.L.map (T.concat.snwl).L.concatMap (\x -> x $// element "li").child.(!!1).(\x -> x $// attributeIs "class" "part")
 
 questionIO :: Cursor -> (T.Text, T.Text)
 questionIO cursor = do
  let io = cursor $// attributeIs "class" "io-style" &// attributeIs "class" "part"
-     inp = L.foldl1 T.append.L.intercalate ["\n"].L.map scrapeNodeWithLaTeX.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head $ io 
-     outp = L.foldl1 T.append.L.intercalate ["\n"].L.map scrapeNodeWithLaTeX.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.last $ io 
+     inp = chnl.L.foldl1 T.append.L.concatMap snwl.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head $ io 
+     outp = chnl.L.foldl1 T.append.L.concatMap snwl.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.last $ io 
  (inp, outp)
 
 questionIOsample :: Cursor -> V.Vector (T.Text, T.Text)
@@ -361,6 +361,8 @@ zipIOFromList []          = []
 
 rmnl :: T.Text -> T.Text
 rmnl = T.replace "\r\n" ""
+
+chnl = T.replace "\r\n" "\n"
 
 changeNewLine :: T.Text -> T.Text
 changeNewLine = T.dropWhile (\x -> (x==' ')||(x=='\n')).T.dropWhileEnd (\x -> (x==' ')||(x=='\n')).T.replace (T.pack "\r\n") (T.pack "\n")

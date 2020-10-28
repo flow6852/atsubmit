@@ -21,6 +21,7 @@ import qualified Network.Socket.ByteString as NSBS
 import qualified Network.URI.Encode as NUE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
+import Data.Bifunctor
 import System.Directory
 import qualified Data.Aeson as DA
 import Turtle
@@ -116,7 +117,7 @@ getRequestWrapper url cke = do
 postRequestWrapper :: T.Text -> [BSC.ByteString] -> [(BSC.ByteString, T.Text)] -> IO (Response BSL.ByteString)
 postRequestWrapper url cke body = do
  req <- setRequestHeader hCookie cke <$> parseRequest (T.unpack url)
- let postReq = urlEncodedBody (Prelude.map (\(x,y) -> (x, encodeUtf8 y)) body) req
+ let postReq = urlEncodedBody (Prelude.map (second encodeUtf8) body) req
  mng <- newManager tlsManagerSettings
  Network.HTTP.Conduit.httpLbs postReq mng
 
@@ -176,8 +177,12 @@ rmFile path = doesFileExist path >>= \x -> when x (removeFile path)
 scrapeNodes curs = case child curs of []    -> content curs
                                       next  -> L.concatMap scrapeNodes next
 
-scrapeNodeWithLaTeX curs = case node curs of NodeElement e -> if ((=="var").nameLocalName.elementName) e then L.concatMap snocons (child curs)
-                                                                                                         else L.concatMap (scrapeNodeWithLaTeX.fromNode) (elementNodes e)
-                                             _             -> content curs
+-- scrapeNodesWithLaTeX
+snwl curs = case node curs of NodeElement e -> case (nameLocalName.elementName) e of "var" -> L.concatMap snocons (child curs)
+                                                                                     "li"  -> (" * ":).L.concatMap (snwl.fromNode) $ elementNodes e
+                                                                                     "pre" -> ("\n```":).L.foldr (:) ["```"] $ L.concatMap (snwl.fromNode) $ elementNodes e
+                                                                                     _     -> L.concatMap (snwl.fromNode) (elementNodes e)
+                              _             -> content curs
  where
-  snocons = L.map ((\x -> T.snoc x '$').T.cons '$').content
+  snocons = L.map ((`T.snoc` '$').T.cons '$').content
+
