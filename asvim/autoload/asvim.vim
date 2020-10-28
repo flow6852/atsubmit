@@ -11,16 +11,6 @@ function! asvim#AtQGet(...) "AtQGet question
 		let cmd = "echo \"error :: command is \"AtQGet [question name] \" \""
         else
 		let cmd = "atsubmit-client qget " . join(a:000, " ")
-                " let getpage = systemlist(cmd)
-		" let status = str2nr(getpage[len(getpage)-1])
-		" if status != 0
-		" 	let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
-		" else
-                " 
-		" 	echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
-		" 	call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
-		" 	let cmd = "echo " . a:1
-		" endif
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
@@ -32,15 +22,6 @@ function! asvim#AtCGet(...) "AtCGet contest
 		let cmd = "echo \"error :: command is \"AtCGet [contest name] \" \""
         else
 		let cmd = "atsubmit-client cget " . join(a:000, " ")
-                " let getpage = systemlist(cmd)
-		" let status = str2nr(getpage[len(getpage)-1])
-		" if status != 0
-		" 	let cmd = "echo \" error :: " . getpage[0] . "\";echo \" status code: " . getpage[1] . "\""
-		" else
-		" 	echo join(split(getpage[:len(getpage)-2], "\n"), ".html ")
-		" 	call system("chromium " . join(split(getpage[:len(getpage)-2]), "\n"), ".html ") . ".html &")
-		" 	let cmd = "echo " . a:1
-		" endif
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
@@ -55,6 +36,9 @@ function! asvim#AtShow(...) " AtGet [question]
 	endif
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
+        let g:tex_conceal="adbmgs"
+        set conceallevel=2
+        setfiletype tex
 	wincmd k
 endfunction
 
@@ -154,8 +138,10 @@ function! asvim#AtStop(...) " AtStop
 endfunction
 
 function! asvim#AtClose()
-	:! atsubmit-client stop
-	cclose
+        if len(getwininfo()) <= 2 && call("getbufvar", [bufnr("%"), "&buftype"]) != "quickfix"
+        	!atsubmit-client stop
+        	cclose
+        endif
 endfunction
 
 " usages
