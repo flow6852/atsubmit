@@ -146,18 +146,18 @@ $ make forvim
 
 ## 各コマンドに対するvimのコマンド
 
-+ `atsubmit-server` $\rightarrow$ `:AtStart`
-+ `atsubmit-client login` $\rightarrow$ `:AtLogin`
-+ `atsubmit-client qget abc000_n` $\rightarrow$ `:AtQGet abc000_n`
-+ `atsubmit-client cget abc000` $\rightarrow$ `:AtCGet abc000`
-+ `atsubmit-client show abc000_n` $\rightarrow$ `:AtShow abc000_n`
-+ `atsubmit-client print` $\rightarrow$ `:AtPrint`
-+ `atsubmit-client test abc000_n` $\rightarrow$ `:AtTest abc000_n`
-+ `atsubmit-client debug abc000_n` $\rightarrow$ `:AtDebug abc000_n`
-+ `atsubmit-client submit abc000_n submit.hs` $\rightarrow$ `:AtSubmit abc000_n`
-+ `atsubmit-client result abc000` $\rightarrow$ `:AtResult abc000`
-+ `atsubmit-client log` $\rightarrow$ `:AtLog`
-+ `atsubmit-client logout` $\rightarrow$ `:AtLogout`
-+ `atsubmit-client stop` $\rightarrow$ `:AtStop`
++ `atsubmit-server` -> `:AtStart`
++ `atsubmit-client login` -> `:AtLogin`
++ `atsubmit-client qget abc000_n` -> `:AtQGet abc000_n`
++ `atsubmit-client cget abc000` -> `:AtCGet abc000`
++ `atsubmit-client show abc000_n` -> `:AtShow abc000_n`
++ `atsubmit-client print` -> `:AtPrint`
++ `atsubmit-client test abc000_n` -> `:AtTest abc000_n`
++ `atsubmit-client debug abc000_n` -> `:AtDebug abc000_n`
++ `atsubmit-client submit abc000_n submit.hs` -> `:AtSubmit abc000_n`
++ `atsubmit-client result abc000` -> `:AtResult abc000`
++ `atsubmit-client log` -> `:AtLog`
++ `atsubmit-client logout` -> `:AtLogout`
++ `atsubmit-client stop` -> `:AtStop`
 
 `atsubmit-client stop`は,vimを閉じた時にも実行されます.
