@@ -180,7 +180,7 @@ scrapeNodes curs = case child curs of []    -> content curs
 -- scrapeNodesWithLaTeX
 snwl curs = case node curs of NodeElement e -> case (nameLocalName.elementName) e of "var" -> L.concatMap snocons (child curs)
                                                                                      "li"  -> (" * ":).L.concatMap (snwl.fromNode) $ elementNodes e
-                                                                                     "pre" -> ("\n```":).L.foldr (:) ["```"] $ L.concatMap (snwl.fromNode) $ elementNodes e
+                                                                                     "pre" -> ("```\n":).L.foldr (:) ["```"] $ L.concatMap (snwl.fromNode) $ elementNodes e
                                                                                      _     -> L.concatMap (snwl.fromNode) (elementNodes e)
                               _             -> content curs
  where

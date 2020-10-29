@@ -344,8 +344,8 @@ questionRestrict = V.fromList.L.map (T.concat.snwl).L.concatMap (\x -> x $// ele
 questionIO :: Cursor -> (T.Text, T.Text)
 questionIO cursor = do
  let io = cursor $// attributeIs "class" "io-style" &// attributeIs "class" "part"
-     inp = chnl.L.foldl1 T.append.L.concatMap snwl.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.head $ io 
-     outp = chnl.L.foldl1 T.append.L.concatMap snwl.L.concatMap (\x -> x $/ checkName (/="h3")).child.Prelude.last $ io 
+     inp = T.intercalate "\n".L.concatMap (L.map (L.foldl1 T.append.(L.map chnl.snwl)).(\x -> x $/ checkName (/="h3"))).child.Prelude.head $ io 
+     outp = T.intercalate "\n".L.concatMap (L.map (L.foldl1 T.append.(L.map chnl.snwl)).(\x -> x $/ checkName (/="h3"))).child.Prelude.last $ io 
  (inp, outp)
 
 questionIOsample :: Cursor -> V.Vector (T.Text, T.Text)
