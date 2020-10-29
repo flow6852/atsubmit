@@ -4,114 +4,160 @@ AtCoderのサンプル取得,サンプル実行,比較,提出,結果の閲覧を
 このツールAtCoderのサーバとコード提出などのやり取りをするためのサーバと
 そのサーバとやり取りするためのクライアントで構成されています.
 
+# インストール
+
+```bash
+$ make install
+```
+
 ## サーバの起動
 
 ```bash
-$ atsubmit
+$ atsubmit-server
 ```
 
-起動時にユーザ名とパスワードの入力を要求されるので入力してください.
-`atsubmit`がdaemon化します.
+`atsubmit-server`がdaemonとして起動します.
+
+## ログイン
+
+```bash
+$ atsubmit-client login
+```
+ユーザ名とパスワードを聞かれます.
+入力するとログイン処理をしてcookieを保存します.(cookieを$HOME/.atsubmit/cookie に保存します.)
 
 ## 問題の取得
 
-コンテスト単位は
+### 実行コマンドと概要
 
 ```bash
-$ atsubmit get abc150
+$ atsubmit-client qget abc000_n abc000_m ...
 ```
-
-問題単位は
+問題abc000\_n,問題abc000\_m ... の情報を取得して,生のhtmlをそれぞれ`abc000_n.html`,`abc000_m.html`をコマンド実行したディレクトリに保存します.
+コマンドを実行したディレクトリに`abc100_n.html`があればこのファイルから問題の情報を取得します.
 
 ```bash
-$ atsubmit get abc150_a
+$ atsubmit-client cget abc000 abc001 ...
 ```
 
-とすればコンテスト単位ならばコンテスト単位で,問題単位であれば問題単位でテストケースの取得と
-コマンドを実行したディレクトリに問題のhtmlファイルを生成します.
+コンテストabc000,コンテストabc001 ... に所属する問題の情報を全て取得して生のhtmlをコマンド実行したディレクトリに保存します.
+コマンドを実行したディレクトリに`abc100_n.html`があればその問題のみ,このファイルから問題の情報を取得します.
+
+### 問題の情報
+
+atsubmitは次の情報を持ちます.
+
++ 問題の元のURL
++ 問題文
++ 制約
++ 入力
++ 入出力例
+
+## 問題の情報の閲覧
+
+```bash
+$ atsubmit-client show abc000_n
+```
+
+atsubmitが保存した問題`abc000_n`の情報を出力します.
 
 ## テストケースの実行
 
-abc150のA問題に対してテストケースを実行したい場合は
 ```bash
-$ atsubmit test abc150_a submit.hs
+$ atsubmit-client test abc000_n submit.hs
 ```
 
-とすればテストケースが正しいかどうかを判定をします.
-この判定にはdockerを用いています.(変更するかも?)
+`submit.hs`を問題abc000\_nの入出力例を使ってテストします.
 
-## 取得した問題とそのテストケースの確認
+以下の判定に対応しています
 
-サーバが取得した問題は次のコマンドで確認できます
++ AC
++ WA
++ TLE
+
+## テストケースを使わない実行
+
 ```bash
-$ atsubmit show
+$ atsubmit-client debug source.hs input.txt
 ```
 
-また,問題のテストケースを確認したい場合は以下のコマンドで確認できます.
+`source.hs`に入力`input.txt`を与えた結果を出力します.
+
+## 取得した問題の確認
+
 ```bash
-$ atsubmit show abc150_a
+$ atsumit-client print
 ```
+
+atsubmitが取得した問題一覧を表示します.
+
+## AtCoderへの提出
+
+```bash
+$ atsubmit-client submit abc000_n submit.hs
+```
+
+`submit.hs`を問題abc000\_nの解答としてAtCoderに提出します.
 
 ## AtCoder側の結果の確認
 
-`atsubmit`が取得した問題の自分の結果を確認したい場合は以下のコマンドで確認できます.
+```bash
+$ atsubmit-client result abc000
+```
+
+問題abc000の全ての結果を表示します.
+
+## ログ
 
 ```bash
-$ atsubmit result
+$ atsubmit-client log
 ```
+
+atsubmit-serverの起動している間に受け取ったコマンドとそのコマンドのステータスを表示します.
+
+## ログアウト
+
+```bash
+$ atsubmit-client logout
+```
+
+ログアウトの処理をしてcookieを削除します.
 
 ## atsubmitの停止
 
-`atsubmit`の停止は以下のコマンドで実行できます.
 ```bash
-$ atsubmit stop
+$ atsubmit-client stop
 ```
 
+atsubmit-serverを停止します.
+
+# vimプラグイン
+
+エディタのプラグインの一例としてvimのプラグインがあります.
+
+## インストール
 
 ```bash
-atsubmit # start atsubmit server
-atsubmit login # relogin and get cookie [ERROR] canot input (remove?)
-atsubmit get [question name] # get latest page
-atsubmit get [contest name] # get question infomations in [contest name]
-atsubmit submit [question name] # submit for latest page
-atsubmit show # show questions
-atsubmit show [question name] # show latest page (?)
-atsubmit test [question name] # run test case using docker
-atsubmit result # show all result about you get
-atsubmit result [question name] # show result
-atsubmit stop # stop server
+$ make forvim
 ```
-# JSON
 
-## First 
-{
-	"socksize":"size of one receiver"
-	"datasize":"all size of sender message"
-}
+`~/.vimrc`に以下の一行を追加してください.
 
-## Request
 
-{
-	"rcom":"row command (maybe for this app client)"
-	"subcmd":"subcommand for atsubmit. get, show, result, test, submit, or stop."
-	"cname":"conntest name (example abc150)"
-	"qname":"question name (example abc150_a)"
-	"file":"file for test or submit"
-	"userdir":"client's working directory"
-}
+## 各コマンドに対するvimのコマンド
 
-## Response
++ `atsubmit-server` $\rightarrow$ `:AtStart`
++ `atsubmit-client login` $\rightarrow$ `:AtLogin`
++ `atsubmit-client qget abc000_n` $\rightarrow$ `:AtQGet abc000_n`
++ `atsubmit-client cget abc000` $\rightarrow$ `:AtCGet abc000`
++ `atsubmit-client show abc000_n` $\rightarrow$ `:AtShow abc000_n`
++ `atsubmit-client print` $\rightarrow$ `:AtPrint`
++ `atsubmit-client test abc000_n` $\rightarrow$ `:AtTest abc000_n`
++ `atsubmit-client debug abc000_n` $\rightarrow$ `:AtDebug abc000_n`
++ `atsubmit-client submit abc000_n submit.hs` $\rightarrow$ `:AtSubmit abc000_n`
++ `atsubmit-client result abc000` $\rightarrow$ `:AtResult abc000`
++ `atsubmit-client log` $\rightarrow$ `:AtLog`
++ `atsubmit-client logout` $\rightarrow$ `:AtLogout`
++ `atsubmit-client stop` $\rightarrow$ `:AtStop`
 
-{
-	"resstatus":"response status (maybe follow https)"
-	"resmsg":"response message"
-	"resresult":"result for test, show or result"
-}
-
-## plugin sumple
-
-look asvim
-
-# TODO
-
- - use docker engine api
+`atsubmit-client stop`は,vimを閉じた時にも実行されます.
