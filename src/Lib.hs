@@ -35,7 +35,7 @@ langJson = "/.config/atsubmit/lang_conf.json"
 helpFile = "/.local/share/man/atsubmit.man"
 cookieFile = "/.cache/atsubmit/cookie"
 
-nullContest = Contest { questions = [], cookie = [], csrf_token = "",rlogs = [], homedir = "", main_file = ""
+nullContest = Contest { questions = [], csrf_token = "",rlogs = [], homedir = "", main_file = ""
                       , input_file = "", compile_file = "", output_file = ""}
 
 nullQuestion = Question { qurl = "", qsentence = "", qrestriction = [], qio = ("", ""), qiosample = []}
@@ -43,9 +43,9 @@ nullQuestion = Question { qurl = "", qsentence = "", qrestriction = [], qio = ("
 nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_image = Nothing
                         , compile = Nothing, exec = Nothing, langid = ""}
 
-createContest :: V.Vector Question -> [BSC.ByteString] -> T.Text -> IO Contest
-createContest q c t = getHomeDirectory >>= \d ->
-                      return Contest { questions = q, cookie = c, csrf_token = t, rlogs = V.empty, homedir = T.pack d
+createContest :: V.Vector Question -> T.Text -> IO Contest
+createContest q t = getHomeDirectory >>= \d ->
+                      return Contest { questions = q, csrf_token = t, rlogs = V.empty, homedir = T.pack d
                                      , main_file = T.append (T.pack d) "/.cache/atsubmit/src/source.txt"
                                      , input_file = T.append (T.pack d) "/.cache/atsubmit/src/input.txt"
                                      , compile_file = T.append (T.pack d) "/.cache/atsubmit/src/comp.txt"
@@ -107,19 +107,27 @@ rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.emp
 takeNList :: Int -> BS.ByteString -> [BS.ByteString]
 takeNList n base = BS.take n base:(if BS.length base < n then [] else takeNList n (BS.drop n base))
 
-getRequestWrapper :: T.Text -> [BSC.ByteString] -> IO (Response BSL.ByteString)
-getRequestWrapper url cke = do
- req <- if Prelude.null cke then parseRequest (T.unpack url)
-        else setRequestHeader hCookie cke <$> parseRequest (T.unpack url)
+getRequestWrapper :: T.Text -> String -> IO (Response BSL.ByteString)
+getRequestWrapper url homedir = do
+ fexist <- doesFileExist (homedir ++ cookieFile)
+ cke <- if fexist then BSC.readFile (homedir ++ cookieFile) else return BS.empty
+ req <- if Prelude.null (BSC.lines cke) then parseRequest (T.unpack url)
+        else setRequestHeader hCookie (BSC.lines cke) <$> parseRequest (T.unpack url)
  mng <- newManager tlsManagerSettings
- Network.HTTP.Conduit.httpLbs req mng
+ response <- Network.HTTP.Conduit.httpLbs req mng
+ BSC.writeFile (homedir ++ cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
+ return response
 
-postRequestWrapper :: T.Text -> [BSC.ByteString] -> [(BSC.ByteString, T.Text)] -> IO (Response BSL.ByteString)
-postRequestWrapper url cke body = do
- req <- setRequestHeader hCookie cke <$> parseRequest (T.unpack url)
+postRequestWrapper :: T.Text -> String -> [(BSC.ByteString, T.Text)] -> IO (Response BSL.ByteString)
+postRequestWrapper url homedir body = do
+ fexist <- doesFileExist (homedir ++ cookieFile)
+ cke <- if fexist then BSC.readFile (homedir ++ cookieFile) else return BS.empty
+ req <- setRequestHeader hCookie (BSC.lines cke) <$> parseRequest (T.unpack url)
  let postReq = urlEncodedBody (Prelude.map (second encodeUtf8) body) req
  mng <- newManager tlsManagerSettings
- Network.HTTP.Conduit.httpLbs postReq mng
+ response <- Network.HTTP.Conduit.httpLbs postReq mng
+ BSC.writeFile (homedir ++ cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
+ return response
 
 languageSelect :: T.Text -> T.Text -> IO LangJson-- name, extention, docker_image, langid
 languageSelect home fp = do

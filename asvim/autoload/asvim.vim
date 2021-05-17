@@ -7,9 +7,9 @@ function! asvim#AtStart(...)
 endfunction
 
 function! asvim#AtQGet(...) "AtQGet question
-	if a:0 != 1
+	if a:0 < 1
 		let cmd = "echo \"error :: command is \"AtQGet [question name] \" \""
-        else
+    else
 		let cmd = "atsubmit-client qget " . join(a:000, " ")
 	endif
 	copen
@@ -18,7 +18,7 @@ function! asvim#AtQGet(...) "AtQGet question
 endfunction
 
 function! asvim#AtCGet(...) "AtCGet contest
-	if a:0 != 1
+	if a:0 < 1
 		let cmd = "echo \"error :: command is \"AtCGet [contest name] \" \""
         else
 		let cmd = "atsubmit-client cget " . join(a:000, " ")
@@ -28,18 +28,38 @@ function! asvim#AtCGet(...) "AtCGet contest
 	wincmd k
 endfunction
 
-function! asvim#AtShow(...) " AtGet [question]
+function! asvim#AtShow(...) " AtShow [question]
 	if a:0 == 1
 		let cmd = "atsubmit-client show " . a:1
 	else
 		let cmd = "echo \"error :: command is \"AtShow [question name] \" \""
 	endif
-	copen
-	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
-        let g:tex_conceal="adbmgs"
-        set conceallevel=2
-        setfiletype tex
-	wincmd k
+    let winnr = map(filter(getwininfo(),{ind, val -> val['terminal'] == 1}), {ind, val -> val['winnr']})
+    if has('nvim')
+        if winnr == []
+            rightb vert call termopen(cmd)
+        else
+            execute winnr[0] . "wincmd w"
+            call term_open(cmd)
+            wincmd p
+        endif
+    else
+        if winnr == []
+            rightb vert call term_start(cmd)
+        else
+            execute winnr[0] . "wincmd w"
+            call term_start(cmd, {'curwin':1})
+            wincmd p
+        endif
+    endif
+    let l:tex_conceal="adbmgs"
+    setl winfixheight
+	" copen
+	" call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
+    "     let g:tex_conceal="adbmgs"
+    "     set conceallevel=2
+    "     setfiletype tex
+	" wincmd k
 endfunction
 
 function! asvim#AtPrint(...) " AtPrint

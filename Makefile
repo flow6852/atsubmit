@@ -5,12 +5,10 @@ LOCAL_CONF_PATH = $(HOME)/.config/$(BIN_NAME)
 LOCAL_MAN_PATH = $(HOME)/.local/share/man
 LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 
-.PHONY: build install clean test forvim
+.PHONY: build install clean test update-all update-app update-json update-sh update-vim
 build :
 	@stack build
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
-	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
+
 test:
 	@stack test
 
@@ -30,7 +28,25 @@ install:
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 	@echo "installed"
 
-update:
+update-all:
+	@stack build
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
+	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
+	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
+
+update-app:
+	@stack build
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
+
+update-json:
+	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
+
+update-vim:
+	@cp -r asvim $(HOME)/.vim/plugged
+
+update-sh:
 	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
 
 uninstall:
@@ -43,6 +59,3 @@ test-clean:
 
 clean:
 	@stack clean
-
-forvim:
-	@cp -r asvim $(HOME)/.vim/plugged

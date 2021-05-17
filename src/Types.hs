@@ -50,7 +50,6 @@ data Question = Question { qurl :: T.Text
                          } deriving (Show, Eq)
 
 data Contest = Contest { questions :: V.Vector Question 
-                       , cookie :: [BSC.ByteString]
                        , csrf_token :: T.Text
                        , rlogs :: V.Vector RLog
                        , homedir :: T.Text
