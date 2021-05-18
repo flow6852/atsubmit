@@ -13,16 +13,15 @@ import System.Directory
 import System.Environment
 import System.IO
 import System.Posix.Daemonize
+import System.FilePath
 import Control.Concurrent
-
-sockpath = "/.local/lib/atsubmit/atsubmit.sock"
 
 main :: IO ()
 main = do
  path <- getEnv "HOME"
- file_exists <- doesFileExist (path ++ cookieFile)
- dat <- (if file_exists then BSC.readFile (path ++ cookieFile) >>= (\x -> createContest V.empty (cookieCsrfToken x))
+ file_exists <- doesFileExist (path </> cookieFile)
+ dat <- (if file_exists then BSC.readFile (path </> cookieFile) >>= (\x -> createContest V.empty (cookieCsrfToken x))
                         else createContest V.empty T.empty)
  contest <- newMVar dat
  let action = server (actionSHelper contest)
- daemonize $ runServer (path ++ sockpath) action
+ daemonize $ runServer (path </> sockpath) action

@@ -16,12 +16,11 @@ import qualified Data.Vector as V
 import Control.Exception
 import qualified Data.List as L
 import System.Exit
-
-sockpath = "/.local/lib/atsubmit/atsubmit.sock"
+import System.FilePath
 
 main :: IO ()
 main = do
- path <- (++ sockpath) <$> getEnv "HOME"
+ path <- (</> sockpath) <$> getEnv "HOME"
  wd <- getCurrentDirectory
  arg <- Prelude.map T.pack <$> getArgs
  case arg of 
@@ -75,7 +74,7 @@ cGetPrint qn = if V.null qn then return ()
 
 test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 test path fn qn wd = do
- sendServer path (\x ->  evalSHelper (Test x (Source (wd ++ ('/':fn))) (QName qn)) x)
+ sendServer path (\x ->  evalSHelper (Test x (Source (wd </> (fn))) (QName qn)) x)
  TIO.putStrLn "test accept."
 
 show :: FilePath -> T.Text -> IO ()
@@ -118,13 +117,13 @@ print path = do
 
 submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 submit path fn qn wd = do
- sendServer path (evalSHelper (Submit (Source (wd ++ ('/':fn))) (QName qn)))
+ sendServer path (evalSHelper (Submit (Source (wd </> fn)) (QName qn)))
  TIO.putStrLn "submit."
 
 debug :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
 debug path src din wd = do
- debugin <- (\x -> if x then din else wd ++ ('/':din)) <$> doesFileExist din
- res <- sendServer path (evalSHelper (Types.Debug (Source (wd ++ ('/':src))) (DIn debugin)))
+ debugin <- (\x -> if x then din else wd </> din) <$> doesFileExist din
+ res <- sendServer path (evalSHelper (Types.Debug (Source (wd </> src)) (DIn debugin)))
  case res of
   DAC (DOut dout) -> TIO.putStrLn dout
   DCE (Message message) -> TIO.putStrLn message

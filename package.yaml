@@ -1,8 +1,8 @@
 name:                atsubmit
 version:             0.1.0.0
-github:              "githubuser/atsubmit"
+github:              "flow6852/atsubmit"
 license:             BSD3
-author:              "Author name here"
+author:              "flow_6852"
 maintainer:          "example@example.com"
 copyright:           "2020 Author name here"
 
@@ -41,6 +41,7 @@ library:
           - uri-encode
           - unbounded-delays
           - containers
+          - filepath
 executables:
   atsubmit-server:
     main:                server.hs
@@ -57,6 +58,7 @@ executables:
     - bytestring
     - directory
     - uri-encode
+    - filepath
   atsubmit-client:
     main:                client.hs
     source-dirs:         app
@@ -72,6 +74,7 @@ executables:
     - bytestring
     - directory
     - uri-encode
+    - filepath
 
 tests:
   atsubmit-test:
@@ -88,3 +91,4 @@ tests:
     - hdaemonize
     - directory
     - bytestring
+    - filepath

@@ -23,6 +23,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Bifunctor
 import System.Directory
+import System.FilePath
 import qualified Data.Aeson as DA
 import Turtle
 import Turtle.Line
@@ -31,9 +32,11 @@ import Control.Concurrent.Timeout
 import Text.XML.Cursor
 import Text.XML
 
-langJson = "/.config/atsubmit/lang_conf.json"
-helpFile = "/.local/share/man/atsubmit.man"
-cookieFile = "/.cache/atsubmit/cookie"
+-- filepath setting
+langJson = normalise ".config/atsubmit/lang_conf.json"
+helpFile = normalise ".local/share/man/atsubmit.man"
+cookieFile = normalise ".cache/atsubmit/cookie"
+sockpath = normalise ".local/lib/atsubmit/atsubmit.sock"
 
 nullContest = Contest { questions = [], csrf_token = "",rlogs = [], homedir = "", main_file = ""
                       , input_file = "", compile_file = "", output_file = ""}
@@ -109,29 +112,29 @@ takeNList n base = BS.take n base:(if BS.length base < n then [] else takeNList 
 
 getRequestWrapper :: T.Text -> String -> IO (Response BSL.ByteString)
 getRequestWrapper url homedir = do
- fexist <- doesFileExist (homedir ++ cookieFile)
- cke <- if fexist then BSC.readFile (homedir ++ cookieFile) else return BS.empty
+ fexist <- doesFileExist (homedir System.FilePath.</> cookieFile)
+ cke <- if fexist then BSC.readFile (homedir System.FilePath.</> cookieFile) else return BS.empty
  req <- if Prelude.null (BSC.lines cke) then parseRequest (T.unpack url)
         else setRequestHeader hCookie (BSC.lines cke) <$> parseRequest (T.unpack url)
  mng <- newManager tlsManagerSettings
  response <- Network.HTTP.Conduit.httpLbs req mng
- BSC.writeFile (homedir ++ cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
+ BSC.writeFile (homedir System.FilePath.</> cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
  return response
 
 postRequestWrapper :: T.Text -> String -> [(BSC.ByteString, T.Text)] -> IO (Response BSL.ByteString)
 postRequestWrapper url homedir body = do
- fexist <- doesFileExist (homedir ++ cookieFile)
- cke <- if fexist then BSC.readFile (homedir ++ cookieFile) else return BS.empty
+ fexist <- doesFileExist (homedir System.FilePath.</> cookieFile)
+ cke <- if fexist then BSC.readFile (homedir System.FilePath.</> cookieFile) else return BS.empty
  req <- setRequestHeader hCookie (BSC.lines cke) <$> parseRequest (T.unpack url)
  let postReq = urlEncodedBody (Prelude.map (second encodeUtf8) body) req
  mng <- newManager tlsManagerSettings
  response <- Network.HTTP.Conduit.httpLbs postReq mng
- BSC.writeFile (homedir ++ cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
+ BSC.writeFile (homedir System.FilePath.</> cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
  return response
 
 languageSelect :: T.Text -> T.Text -> IO LangJson-- name, extention, docker_image, langid
 languageSelect home fp = do
- json <- BSL.fromStrict <$> (BS.readFile.T.unpack.T.append home) langJson
+ json <- BSL.fromStrict <$> (BS.readFile.(\x -> T.unpack home System.FilePath.</> x)) langJson
  case DA.decode json :: Maybe LJBase of
   Nothing -> return nullLangJson
   Just lists -> case V.find (V.elem (getExtention fp).extention) (language lists) of 

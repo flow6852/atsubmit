@@ -31,6 +31,7 @@ import qualified Control.Exception as E
 import Control.Concurrent.MVar
 import Control.Monad.IO.Class
 import System.Directory
+import System.FilePath
 import Network.HTTP.Simple
 import Network.HTTP.Types.Status
 import Network.Socket
@@ -165,8 +166,8 @@ evalSHelper :: MVar Contest -> SHelper a -> IO a
 
 evalSHelper mvcont (Login (Username user) (Password pass)) = do
  contest <- readMVar mvcont
- fexist <- doesFileExist $ T.unpack (homedir contest) ++ cookieFile
- when fexist $ rmFile $ T.unpack (homedir contest) ++ cookieFile
+ fexist <- doesFileExist $ T.unpack (homedir contest) </> cookieFile
+ when fexist $ rmFile $ T.unpack (homedir contest) </> cookieFile
  fstres <- getRequestWrapper "https://atcoder.jp/login" ((T.unpack.homedir) contest)
  let csrf_tkn = scrapingCsrfToken fstres
  let fstcke = getResponseHeader hSetCookie fstres
@@ -299,7 +300,7 @@ evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
  res <- postRequestWrapper "https://atcoder.jp/logout" ((T.unpack.homedir) contest) [("csrf_token", csrf_token contest)]
  when (getResponseStatus res /= status200) $ throwIO Unknown
- rmFile $ T.unpack (homedir contest) ++ cookieFile
+ rmFile $ T.unpack (homedir contest) </> cookieFile
  swapMVar mvcont $ contest {csrf_token = "" }
  return ()
 
