@@ -2,7 +2,7 @@ autocmd QuitPre * call asvim#AtClose()
 call setqflist([], " ", {'lines':systemlist('echo first')})
 function! asvim#AtStart(...)
 	copen
-	call setqflist([], " ", {'nr':'$', 'lines': systemlist("atsubmit-server")})
+	call setqflist([], " ", {'nr':'$', 'lines': systemlist("atsubmit-server --daemonize")})
 	wincmd k
 endfunction
 
