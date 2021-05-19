@@ -49,10 +49,10 @@ nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_i
 createContest :: V.Vector Question -> T.Text -> IO Contest
 createContest q t = getHomeDirectory >>= \d ->
                       return Contest { questions = q, csrf_token = t, rlogs = V.empty, homedir = d
-                                     , main_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/source.txt"
-                                     , input_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/input.txt"
-                                     , compile_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/comp.txt"
-                                     , output_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/outres.txt"}
+                                     , main_file = d System.FilePath.</> normalise ".cache/atsubmit/src/source.txt"
+                                     , input_file = d System.FilePath.</> normalise ".cache/atsubmit/src/input.txt"
+                                     , compile_file = d System.FilePath.</> normalise ".cache/atsubmit/src/comp.txt"
+                                     , output_file = d System.FilePath.</> normalise ".cache/atsubmit/src/outres.txt"}
 
 createQuestion :: T.Text -> T.Text -> V.Vector T.Text -> (T.Text, T.Text) -> V.Vector (T.Text, T.Text) -> Question
 createQuestion url sentence restriction io iosample = Question { qurl = url, qsentence = sentence, qrestriction = restriction, qio = io, qiosample = iosample}
