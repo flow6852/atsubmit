@@ -44,7 +44,7 @@ library:
           - filepath
 executables:
   atsubmit-server:
-    main:                server.hs
+    main:                server-linux.hs
     source-dirs:         app
     ghc-options:
     - -threaded

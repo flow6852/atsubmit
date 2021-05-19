@@ -7,11 +7,11 @@ LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 .PHONY: build install clean test update-all update-app update-json update-sh update-vim
 
 ifeq ($(shell uname),Linux)
-	package.yaml: package-linux.yaml
-		ln -s $< $@
+package.yaml: package-linux.yaml
+	@ln -s $< $@
 else
-	package.yaml: package-win.yaml
-		mklink $@ $<
+package.yaml: package-win.yaml
+	@mklink $@ $<
 endif
 
 build:
