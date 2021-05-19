@@ -166,12 +166,12 @@ evalSHelper :: MVar Contest -> SHelper a -> IO a
 
 evalSHelper mvcont (Login (Username user) (Password pass)) = do
  contest <- readMVar mvcont
- fexist <- doesFileExist $ T.unpack (homedir contest) </> cookieFile
- when fexist $ rmFile $ T.unpack (homedir contest) </> cookieFile
- fstres <- getRequestWrapper "https://atcoder.jp/login" ((T.unpack.homedir) contest)
+ fexist <- doesFileExist $ homedir contest </> cookieFile
+ when fexist $ rmFile $ homedir contest </> cookieFile
+ fstres <- getRequestWrapper "https://atcoder.jp/login" (homedir contest)
  let csrf_tkn = scrapingCsrfToken fstres
  let fstcke = getResponseHeader hSetCookie fstres
- response <- postRequestWrapper "https://atcoder.jp/login" ((T.unpack.homedir) contest) [ ("username", user), ("password", pass), ("csrf_token", csrf_tkn)]
+ response <- postRequestWrapper "https://atcoder.jp/login" (homedir contest) [ ("username", user), ("password", pass), ("csrf_token", csrf_tkn)]
  when ((checkFailLogin.getResponseBody) response) $ createContest V.empty [] >>= \x -> swapMVar mvcont x >> throwIO FailLogin
 
  swapMVar mvcont $ contest {csrf_token = csrf_tkn}
@@ -200,10 +200,10 @@ evalSHelper mvcont (CGet cn (Userdir ud)) = do
 
 evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
  contest <- readMVar mvcont
- lang <- languageSelect (homedir contest) (T.pack source)
+ lang <- languageSelect (homedir contest) source
  let func = if is_docker lang then useDockerTest (docker_image lang) contest
                               else unUseDocker (compile lang) (exec lang) contest
- copyFile source ((T.unpack.main_file) contest)
+ copyFile source (main_file contest)
  let mquest = V.find ((== qn).T.takeWhileEnd (/='/').qurl) $ questions contest
  case mquest of Nothing -> throwIO $ NotGetQuestion (QName qn) -- not getting
                 Just a  -> testLoop contest (qiosample a) func (T.append "Main." ((V.head.extention) lang))
@@ -211,10 +211,10 @@ evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
  where
   testLoop :: Contest -> V.Vector (T.Text, T.Text) -> (T.Text -> IO (Maybe Int)) -> T.Text -> IO ()
   testLoop c qs func main = if V.null qs then return () else do
-   TIO.writeFile ((T.unpack.input_file) c) $ (fst.V.head) qs
+   TIO.writeFile (input_file c) $ (fst.V.head) qs
    ec <- func main
-   outres <- TIO.readFile ((T.unpack.output_file) c)
-   comp <- TIO.readFile ((T.unpack.compile_file) c)
+   outres <- TIO.readFile (output_file c)
+   comp <- TIO.readFile (compile_file c)
    let res = case ec of
                     Just 0  -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs)
                              then AC
@@ -231,22 +231,22 @@ evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
 evalSHelper mvcont (Submit (Source source) (QName qn)) = do
  contest <- readMVar mvcont
  src <- TIO.readFile source
- lang <- languageSelect (homedir contest) (T.pack source)
+ lang <- languageSelect (homedir contest) source
  let cn = T.takeWhile (/='_') qn
      questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submit"]
- res <- postRequestWrapper questurl ((T.unpack.homedir) contest) [ ("data.TaskScreenName", qn), ("data.LanguageId", langid lang), ("sourceCode", src), ("csrf_token", csrf_token contest)]
+ res <- postRequestWrapper questurl (homedir contest) [ ("data.TaskScreenName", qn), ("data.LanguageId", langid lang), ("sourceCode", src), ("csrf_token", csrf_token contest)]
  return ()
 
 evalSHelper mvcont (Types.Debug (Source source) (DIn din)) = do
  contest <- readMVar mvcont
- lang <- languageSelect (homedir contest) (T.pack source)
- copyFile source ((T.unpack.main_file) contest)
- copyFile din ((T.unpack.input_file) contest) 
+ lang <- languageSelect (homedir contest) source
+ copyFile source (main_file contest)
+ copyFile din (input_file contest) 
  ec <- if is_docker lang then useDockerTest (docker_image lang) contest (T.append "Main." ((V.head.extention) lang))
                          else unUseDocker (compile lang) (exec lang) contest (T.append "Main." ((V.head.extention) lang))
- outres <- TIO.readFile ((T.unpack.output_file) contest)
- comp <- TIO.readFile ((T.unpack.compile_file) contest) 
- dinp <- TIO.readFile ((T.unpack.input_file) contest)
+ outres <- TIO.readFile (output_file contest)
+ comp <- TIO.readFile (compile_file contest) 
+ dinp <- TIO.readFile (input_file contest)
  return $ case ec of Just 0  -> DAC (DOut outres)
                      Just 1  -> DCE (Message comp)
                      Just 2  -> DRE
@@ -265,7 +265,7 @@ evalSHelper mvcont (Show (QName qn)) = do
 
 evalSHelper mvcont (Result (CName cn)) = do
  contest <- readMVar mvcont
- res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submissions/me"]) ((T.unpack.homedir) contest)
+ res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submissions/me"]) (homedir contest)
  when (getResponseStatus res /= status200) $ throwIO Unknown
  return $ CResult $ result.fromDocument.parseLBS.getResponseBody $ res
   where
@@ -283,7 +283,7 @@ evalSHelper mvcont Log = do
 
 evalSHelper mvcont (LangId (Lang lang)) = do
  contest <- readMVar mvcont
- res <- getRequestWrapper "https://atcoder.jp/contests/practice/submit" ((T.unpack.homedir) contest)
+ res <- getRequestWrapper "https://atcoder.jp/contests/practice/submit" (homedir contest)
  let langids = (getIds.fromDocument.parseLBS.getResponseBody) res
  if T.null lang then return langids
                 else return $ V.filter (\(LanguageId (_, Lang x)) -> T.isInfixOf lang ((L.head.T.words) x)) langids
@@ -298,14 +298,14 @@ evalSHelper mvcont (LangId (Lang lang)) = do
 
 evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
- res <- postRequestWrapper "https://atcoder.jp/logout" ((T.unpack.homedir) contest) [("csrf_token", csrf_token contest)]
+ res <- postRequestWrapper "https://atcoder.jp/logout" (homedir contest) [("csrf_token", csrf_token contest)]
  when (getResponseStatus res /= status200) $ throwIO Unknown
- rmFile $ T.unpack (homedir contest) </> cookieFile
+ rmFile $ homedir contest </> cookieFile
  swapMVar mvcont $ contest {csrf_token = "" }
  return ()
 
 getContestInfo :: CName -> FilePath -> Contest -> IO (V.Vector GetResult, V.Vector Question) -- (question names)
-getContestInfo (CName cn) userdir contest = getRequestWrapper contesturl ((T.unpack.homedir) contest) >>= \res ->
+getContestInfo (CName cn) userdir contest = getRequestWrapper contesturl (homedir contest) >>= \res ->
   if getResponseStatus res /= status200 then return (V.singleton (ContestNotExist (CName cn)),V.singleton nullQuestion)
   else mapM (\x -> getPageInfo (QName x) userdir contest) ((V.fromList.quests.fromDocument.parseLBS.getResponseBody) res) >>= \x -> 
    return $ V.unzip x
@@ -320,7 +320,7 @@ getPageInfo (QName qn) userdir contest =
  if V.elem qn (V.map (T.takeWhileEnd (/='/').qurl) (questions contest)) then return (AlreadyGet (QName qn),nullQuestion)
  else doesFileExist fname >>= \fcheck -> 
   if fcheck then Text.HTML.DOM.readFile fname >>= \res -> return (FromLocal (QName qn), newQuest res)
-  else getRequestWrapper questurl ((T.unpack.homedir) contest) >>= \res ->
+  else getRequestWrapper questurl (homedir contest) >>= \res ->
    if getResponseStatus res /= status200 then return (QuestionNotExist (QName qn), nullQuestion)
    else do
     TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)

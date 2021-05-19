@@ -52,11 +52,11 @@ data Question = Question { qurl :: T.Text
 data Contest = Contest { questions :: V.Vector Question 
                        , csrf_token :: T.Text
                        , rlogs :: V.Vector RLog
-                       , homedir :: T.Text
-                       , main_file :: T.Text
-                       , input_file :: T.Text
-                       , compile_file :: T.Text
-                       , output_file :: T.Text
+                       , homedir :: FilePath
+                       , main_file :: FilePath
+                       , input_file :: FilePath
+                       , compile_file :: FilePath
+                       , output_file :: FilePath
                        } deriving (Show, Eq)
 
 -- 一回分のソケットサイズと送信するデータの大きさを束縛する

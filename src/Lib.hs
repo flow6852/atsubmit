@@ -48,11 +48,11 @@ nullLangJson = LangJson { name = "", extention = [], is_docker = False, docker_i
 
 createContest :: V.Vector Question -> T.Text -> IO Contest
 createContest q t = getHomeDirectory >>= \d ->
-                      return Contest { questions = q, csrf_token = t, rlogs = V.empty, homedir = T.pack d
-                                     , main_file = T.append (T.pack d) "/.cache/atsubmit/src/source.txt"
-                                     , input_file = T.append (T.pack d) "/.cache/atsubmit/src/input.txt"
-                                     , compile_file = T.append (T.pack d) "/.cache/atsubmit/src/comp.txt"
-                                     , output_file = T.append (T.pack d) "/.cache/atsubmit/src/outres.txt"}
+                      return Contest { questions = q, csrf_token = t, rlogs = V.empty, homedir = d
+                                     , main_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/source.txt"
+                                     , input_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/input.txt"
+                                     , compile_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/comp.txt"
+                                     , output_file = d System.FilePath.</> normalise "/.cache/atsubmit/src/outres.txt"}
 
 createQuestion :: T.Text -> T.Text -> V.Vector T.Text -> (T.Text, T.Text) -> V.Vector (T.Text, T.Text) -> Question
 createQuestion url sentence restriction io iosample = Question { qurl = url, qsentence = sentence, qrestriction = restriction, qio = io, qiosample = iosample}
@@ -132,17 +132,18 @@ postRequestWrapper url homedir body = do
  BSC.writeFile (homedir System.FilePath.</> cookieFile) (BSC.unlines (getResponseHeader hSetCookie response))
  return response
 
-languageSelect :: T.Text -> T.Text -> IO LangJson-- name, extention, docker_image, langid
+-- name, extention, docker_image, langid
+languageSelect :: System.FilePath.FilePath -> System.FilePath.FilePath -> IO LangJson
 languageSelect home fp = do
- json <- BSL.fromStrict <$> (BS.readFile.(\x -> T.unpack home System.FilePath.</> x)) langJson
+ json <- BSL.fromStrict <$> (BS.readFile.combine home) langJson
  case DA.decode json :: Maybe LJBase of
   Nothing -> return nullLangJson
   Just lists -> case V.find (V.elem (getExtention fp).extention) (language lists) of 
                      Nothing   -> return nullLangJson
                      Just lang -> return lang
  where
-  getExtention :: T.Text -> T.Text
-  getExtention = T.takeWhileEnd (/= '.')
+  getExtention :: System.FilePath.FilePath -> T.Text
+  getExtention = T.takeWhileEnd (/= '.').T.pack
 
 checkResult :: [T.Text] -> [T.Text] -> Bool
 checkResult [] []           = True
@@ -153,13 +154,13 @@ checkResult _ _             = False
 useDockerTest :: Maybe T.Text -> Contest -> T.Text -> IO (Maybe Int)
 useDockerTest (Just image) contest main = do
  shell (V.foldl1 T.append ["docker create --name atsubmit_run --pids-limit 100 --network none ", image]) Turtle.empty
- shell (V.foldl1 T.append ["docker cp ", main_file contest, " atsubmit_run:/home/", main]) Turtle.empty
- shell (V.foldl1 T.append ["docker cp ", input_file contest, " atsubmit_run:/home/input.txt"]) Turtle.empty
+ shell (V.foldl1 T.append ["docker cp ", (T.pack.main_file) contest, " atsubmit_run:/home/", main]) Turtle.empty
+ shell (V.foldl1 T.append ["docker cp ", (T.pack.input_file) contest, " atsubmit_run:/home/input.txt"]) Turtle.empty
  shell "docker start atsubmit_run" Turtle.empty
  ec <- shell "timeout 2 docker wait atsubmit_run" Turtle.empty
  timecheck <- Turtle.fold (inshell "docker inspect atsubmit_run --format=\'{{.State.ExitCode}}\'" Turtle.empty) CF.head
- shell (V.foldl1 T.append ["docker cp atsubmit_run:/home/output.txt ", output_file contest]) Turtle.empty
- shell (V.foldl1 T.append ["docker cp atsubmit_run:/home/comp.txt ", compile_file contest]) Turtle.empty
+ shell (V.foldl1 T.append ["docker cp atsubmit_run:/home/output.txt ", (T.pack.output_file) contest]) Turtle.empty
+ shell (V.foldl1 T.append ["docker cp atsubmit_run:/home/comp.txt ", (T.pack.compile_file) contest]) Turtle.empty
  shell "docker rm -f atsubmit_run" Turtle.empty
  case (ec,timecheck) of
   (ExitSuccess, Just "0") -> return $ Just 0
@@ -170,12 +171,12 @@ useDockerTest _ _ _ = return Nothing
 
 unUseDocker :: Maybe T.Text -> Maybe T.Text -> Contest -> T.Text -> IO (Maybe Int)
 unUseDocker (Just compcmd) (Just execmd) contest main = do
- copyFile ((T.unpack.main_file) contest) (T.unpack main)
- comp <- shell (V.foldl1 T.append [compcmd, " > ",compile_file contest, " 2>&1"]) Turtle.empty
+ copyFile (main_file contest) (T.unpack main)
+ comp <- shell (V.foldl1 T.append [compcmd, " > ", (T.pack.compile_file) contest, " 2>&1"]) Turtle.empty
  case comp of
   ExitFailure _ -> return $ Just 1
   ExitSuccess -> do
-   exe <- shell (V.foldl1 T.append ["timeout 2 sh -c \"", execmd, " < ", input_file contest, " > ", output_file contest, "\""]) Turtle.empty
+   exe <- shell (V.foldl1 T.append ["timeout 2 sh -c \"", execmd, " < ", (T.pack.input_file) contest, " > ", (T.pack.output_file) contest, "\""]) Turtle.empty
    case exe of
     ExitFailure 124 -> return $ Just 124
     ExitFailure n   -> return $ Just 2
