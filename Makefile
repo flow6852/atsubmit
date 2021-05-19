@@ -4,9 +4,16 @@ LOCAL_CACHE_PATH = $(HOME)/.cache/$(BIN_NAME)
 LOCAL_CONF_PATH = $(HOME)/.config/$(BIN_NAME)
 LOCAL_MAN_PATH = $(HOME)/.local/share/man
 LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
+ifeq ($(shell uname),Linux)
+	package.yaml: package-linux.yaml
+		ln -s $< $@
+else
+	package.yaml: package-win.yaml
+		mklink $@ $<
+endif
 
 .PHONY: build install clean test update-all update-app update-json update-sh update-vim
-build :
+build:
 	@stack build
 
 test:
