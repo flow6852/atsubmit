@@ -41,7 +41,6 @@ function! asvim#AtShow(...) " AtShow [question]
         else
             execute winnr[0] . "wincmd w"
             call term_open(cmd)
-            wincmd p
         endif
     else
         if winnr == []
@@ -49,11 +48,13 @@ function! asvim#AtShow(...) " AtShow [question]
         else
             execute winnr[0] . "wincmd w"
             call term_start(cmd, {'curwin':1})
-            wincmd p
         endif
     endif
     let l:tex_conceal="adbmgs"
+    set conceallevel=2
+    setfiletype tex
     setl winfixheight
+    wincmd p
 	" copen
 	" call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
     "     let g:tex_conceal="adbmgs"
