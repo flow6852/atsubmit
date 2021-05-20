@@ -22,8 +22,8 @@ main = do
  path <- getEnv "HOME"
  arg <- Prelude.map T.pack <$> getArgs
  file_exists <- doesFileExist (path </> cookieFile)
- dat <- (if file_exists then BSC.readFile (path </> cookieFile) >>= (\x -> createContest V.empty (cookieCsrfToken x))
-                        else createContest V.empty T.empty)
+ dat <- if file_exists then BSC.readFile (path </> cookieFile) >>= (createContest V.empty . cookieCsrfToken)
+                       else createContest V.empty T.empty
  contest <- newMVar dat
  let action = server (actionSHelper contest)
  case arg of
