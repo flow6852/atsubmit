@@ -1,5 +1,12 @@
 autocmd QuitPre * call asvim#AtClose()
 call setqflist([], " ", {'lines':systemlist('echo first')})
+function! s:job_handler(ch, msg) abort
+    caddexpr a:msg
+    cwindow
+endfunction
+let job_options = {}
+let job_options.out_mode = 'nl'
+
 function! asvim#AtStart(...)
 	copen
 	call setqflist([], " ", {'nr':'$', 'lines': systemlist("atsubmit-server --daemonize")})
@@ -92,7 +99,8 @@ function! asvim#AtTest(...) " AtTest question
 		let cmd = "atsubmit-client test " . a:1 . " " . expand("%")
 	endif
 	copen
-	call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
+    call setqflist([], " ", {'nr':'$', 'lines': []})
+    let s:job = job_start(cmd, {'out_cb': function('s:job_handler')})
 	wincmd k
 endfunction
 
