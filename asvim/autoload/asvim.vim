@@ -1,14 +1,40 @@
 autocmd QuitPre * call asvim#AtClose()
+function! s:exec_cmd_term(cmd) abort
+    if !exists('s:basewinid') 
+        let s:basewinid = win_getid()
+    endif
+
+    if has('nvim')
+        if !exists('s:exec_termid')
+            bo call termopen(a:cmd, {'term_rows': '10'})
+            setl winfixheight
+            let s:exec_termid = win_getid()
+        else
+            execute win_gotoid(s:exec_termid)
+            call term_open(a:cmd)
+        endif
+    else
+        if !exists('s:exec_termid')
+            bo call term_start(a:cmd, {'term_rows': '10'})
+            setl winfixheight
+            let s:exec_termid = win_getid()
+        else
+            execute win_gotoid(s:exec_termid)
+            call term_start(a:cmd, {'curwin':1})
+        endif
+    endif
+
+    call win_gotoid(s:basewinid)
+endfunction
+
 function! s:job_handler(ch, msg) abort
     caddexpr a:msg
 endfunction
 
 function! asvim#AtStart(...)
     let cmd = "atsubmit-server --daemonize"
-    let s:winnr = winnr()
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-	copen
-    exe s:winnr . "wincmd w"
+    call job_start(cmd)
+    call s:exec_cmd_term("echo atsubmit start")
 endfunction
 
 function! asvim#AtQGet(...) "AtQGet question
@@ -17,9 +43,7 @@ function! asvim#AtQGet(...) "AtQGet question
     else
 		let cmd = "atsubmit-client qget " . join(a:000, " ")
 	endif
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-    exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtCGet(...) "AtCGet contest
@@ -28,9 +52,7 @@ function! asvim#AtCGet(...) "AtCGet contest
         else
 		let cmd = "atsubmit-client cget " . join(a:000, " ")
 	endif
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-    exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtShow(...) " AtShow [question]
@@ -39,19 +61,24 @@ function! asvim#AtShow(...) " AtShow [question]
 	else
 		let cmd = "echo \"error :: command is \"AtShow [question name] \" \""
 	endif
-    let winnr = map(filter(getwininfo(),{ind, val -> val['terminal'] == 1}), {ind, val -> val['winnr']})
+
+    if !exists('s:basewinid')
+        let s:basewinid = win_getid()
+    endif
     if has('nvim')
-        if winnr == []
+        if !exists('s:show_termid')
             rightb vert call termopen(cmd)
+            let s:show_termid = win_getid()
         else
-            execute winnr[0] . "wincmd w"
+            call win_gotoid(s:show_termid)
             call term_open(cmd)
         endif
     else
-        if winnr == []
+        if !exists('s:show_termid')
             rightb vert call term_start(cmd)
+            let s:show_termid = win_getid()
         else
-            execute winnr[0] . "wincmd w"
+            call win_gotoid(s:show_termid)
             call term_start(cmd, {'curwin':1})
         endif
     endif
@@ -59,13 +86,9 @@ function! asvim#AtShow(...) " AtShow [question]
     set conceallevel=2
     setfiletype tex
     setl winfixheight
-    exe s:winnr . "wincmd w"
-	" copen
-	" call setqflist([], " ", {'nr':'$', 'lines': systemlist(cmd)})
-    "     let g:tex_conceal="adbmgs"
-    "     set conceallevel=2
-    "     setfiletype tex
-	" wincmd k
+    call win_gotoid(s:basewinid)
+
+    echo s:
 endfunction
 
 function! asvim#AtPrint(...) " AtPrint
@@ -74,9 +97,7 @@ function! asvim#AtPrint(...) " AtPrint
 	else
 		let cmd = "echo \"error :: command is \"AtPrint [question name] \" \""
 	endif
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let s:job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-    exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtSubmit(...) " AtSubmit question
@@ -85,9 +106,7 @@ function! asvim#AtSubmit(...) " AtSubmit question
 	else 
 		let cmd = "atsubmit-client submit " . a:1 . " " . expand("%")
 	endif
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let s:job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-    exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtTest(...) " AtTest question
@@ -96,9 +115,7 @@ function! asvim#AtTest(...) " AtTest question
 	else 
 		let cmd = "atsubmit-client test " . a:1 . " " . expand("%")
 	endif
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let s:job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-    exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtDebug(...) "AtDebug
@@ -111,10 +128,8 @@ function! asvim#AtDebug(...) "AtDebug
 	let tmp = tempname()
 	call writefile(txt, tmp)
 	let cmd = "atsubmit-client debug " . expand("%") . " " . tmp
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
+    call s:exec_cmd_term(cmd)
     call delete(tmp)
-    exe s:winnr . "wincmd w"
 endfunction
 
 function! asvim#AtLogin(...) "AtLogin
@@ -124,10 +139,8 @@ function! asvim#AtLogin(...) "AtLogin
     let tmp = tempname()
     call writefile(txt, tmp)
 	let cmd = "atsubmit-client login < " . tmp
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let s:job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
+    call s:exec_cmd_term(cmd)
     call delete(tmp)
-    exe s:winnr . "wincmd w"
 endfunction
 
 function! asvim#AtResult(...) "AtResult question
@@ -138,36 +151,27 @@ function! asvim#AtResult(...) "AtResult question
 	else 
 		let cmd = "echo \"error :: command is \"AtResult [ , question name] \" \""
 	endif
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let s:job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-	exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtLogout(...) " AtLogout
 	let cmd = "atsubmit-client logout"
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-	exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtLog(...) " AtLog
 	let cmd = "atsubmit-client log"
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-	exe s:winnr . "wincmd w"
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtStop(...) " AtStop
 	let cmd = "atsubmit-client stop"
-	call setqflist([], " ", {'nr':'$', 'lines': []})
-    let job = job_start(cmd, {'out_cb': function('s:job_handler'), 'out_mode': 'nl'})
-	cclose
+    call s:exec_cmd_term(cmd)
 endfunction
 
 function! asvim#AtClose()
     if len(getwininfo()) <= 2 && call("getbufvar", [bufnr("%"), "&buftype"]) != "quickfix"
     	!atsubmit-client stop
-    	cclose
     endif
 endfunction
 
