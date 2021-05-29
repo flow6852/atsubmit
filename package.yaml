@@ -45,12 +45,13 @@ library:
           - string-conversions
 executables:
   atsubmit-server:
-    main: server.hs
     when:
     - condition: 'os(windows)'
       then:
+        main: server-win.hs
         source-dirs: app/win
       else: 
+        main: server-linux.hs
         source-dirs: app/linux
         dependencies:
         - hdaemonize
@@ -67,12 +68,13 @@ executables:
     - uri-encode
     - filepath
   atsubmit-client:
-    main:                client.hs
     when:
     - condition: 'os(windows)'
       then:
+        main: client-win.hs
         source-dirs: app/windows
       else:
+        main: client-linux.hs
         source-dirs: app/linux
     ghc-options:
     - -threaded
