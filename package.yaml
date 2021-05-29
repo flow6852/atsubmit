@@ -72,7 +72,7 @@ executables:
     - condition: 'os(windows)'
       then:
         main: client-win.hs
-        source-dirs: app/windows
+        source-dirs: app/win
       else:
         main: client-linux.hs
         source-dirs: app/linux
