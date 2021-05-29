@@ -11,6 +11,7 @@ import Types
 
 import qualified Data.Text as T
 import Data.Functor
+import Data.Char
 import System.Environment
 import System.Directory
 import qualified Data.Text.IO as TIO
@@ -126,6 +127,7 @@ submit path fn qn wd = do
  sid <- sendServer path (evalSHelper (Submit (Source (wd </> fn)) (QName qn)))
  TIO.putStrLn "submit."
  TIO.putStrLn ""
+ printUpdate $ V.foldl1 T.append [qn, alterTab, "(WJ)"]
  threadDelay $ 3000 * 1000
  resultRealtime path (T.takeWhile (/= '_') qn) qn  (Just sid)
 
@@ -226,8 +228,8 @@ printRealtime qn cres = if T.isInfixOf "/" cres then do
       sharps      = T.replicate ((fromIntegral.floor :: Double -> Int) (int2Double sharpWidth * (done / all))) "#"
       tmp         = T.replicate ((fromIntegral.floor :: Double -> Int) (int2Double sharpWidth * ((all - done) / all))) "."
   dots <- getWidth >>= \x -> return $ T.replicate (T.length tmp - (T.length sharps + T.length tmp - sharpWidth)) "."
-  printUpdate $ V.foldl1 T.append [qn, alterTab, "[", sharps, dots , "] (", T.takeWhile (/=' ') cres, ")"]
- else printUpdate $ V.foldl1 T.append [qn, alterTab, "(", T.takeWhile (/=' ') cres, ")"]
+  printUpdate $ V.foldl1 T.append [qn, alterTab, "[", sharps, dots , "] (", T.takeWhile (\x -> isDigit x || x == ' ') cres, ")"]
+ else printUpdate $ V.foldl1 T.append [qn, alterTab, "(", T.takeWhile (\x -> isDigit x || x == ' ') cres, ")"]
 
 printUpdate :: T.Text -> IO()
 printUpdate text = TIO.putStr "\^[[A" >> (getWidth >>= \x -> TIO.putStrLn (T.replicate x " ")) >> TIO.putStr "\^[[A" >> TIO.putStrLn text
