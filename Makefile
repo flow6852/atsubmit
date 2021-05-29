@@ -22,12 +22,12 @@ test:
 
 install:
 	@stack build
-	@if [ ! -d $(LOCAL_BIN_PATH) ]; then mkdir $(LOCAL_BIN_PATH); fi
-	@if [ ! -d $(LOCAL_CACHE_PATH) ]; then mkdir $(LOCAL_CACHE_PATH) ; fi
-	@if [ ! -d $(LOCAL_CACHE_PATH)/src ]; then mkdir $(LOCAL_CACHE_PATH)/src ; fi
-	@if [ ! -d $(LOCAL_CONF_PATH) ]; then mkdir $(LOCAL_CONF_PATH) ; fi
-	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir $(LOCAL_LIB_PATH) ; fi
-	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir $(LOCAL_MAN_PATH) ; fi
+	@if [ ! -d $(LOCAL_BIN_PATH) ]; then mkdir -p $(LOCAL_BIN_PATH); fi
+	@if [ ! -d $(LOCAL_CACHE_PATH) ]; then mkdir -p $(LOCAL_CACHE_PATH) ; fi
+	@if [ ! -d $(LOCAL_CACHE_PATH)/src ]; then mkdir -p $(LOCAL_CACHE_PATH)/src ; fi
+	@if [ ! -d $(LOCAL_CONF_PATH) ]; then mkdir -p $(LOCAL_CONF_PATH) ; fi
+	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir -p $(LOCAL_LIB_PATH) ; fi
+	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir -p $(LOCAL_MAN_PATH) ; fi
 	@sudo install $(shell stack exec -- which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
 	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
 	@if [ $(shell docker image ls atjudge_rs | wc -l) -eq 1 ]; then docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
