@@ -11,6 +11,7 @@ import Types
 
 import qualified Data.Text as T
 import Data.Functor
+import Data.Char
 import System.Environment
 import System.Directory
 import qualified Data.Text.IO as TIO
@@ -126,6 +127,7 @@ submit path fn qn wd = do
  sid <- sendServer path (evalSHelper (Submit (Source (wd </> fn)) (QName qn)))
  TIO.putStrLn "submit."
  TIO.putStrLn ""
+ printUpdate $ V.foldl1 T.append [qn, alterTab, "WJ"]
  threadDelay $ 3000 * 1000
  resultRealtime path (T.takeWhile (/= '_') qn) qn  (Just sid)
 
@@ -213,7 +215,7 @@ logout path = do
 resultRealtime :: FilePath -> T.Text -> T.Text -> Maybe Sid -> IO()
 resultRealtime path cn qn sids = do
  res <- sendServer path (evalSHelper (Result (CName cn) sids))
- let cres = case res of CResult tmp -> T.takeWhile (/=' ').T.takeWhile (/='<').(!!2).T.split (=='>').Prelude.head.Prelude.head $ tmp
+ let cres = case res of CResult tmp -> T.takeWhile (/='<').(!!2).T.split (=='>').Prelude.head.Prelude.head $ tmp
  if T.isInfixOf "/" cres || cres == "WJ" then printRealtime qn cres >> threadDelay (1000 * interval res) >> resultRealtime path cn qn sids
                                          else printUpdate $ V.foldl1 T.append [qn, "    ", cres]
 
@@ -221,13 +223,13 @@ alterTab = "    "
 
 printRealtime :: T.Text -> T.Text -> IO()
 printRealtime qn cres = if T.isInfixOf "/" cres then do
-  sharpWidth <- (\x -> x - T.length qn - T.length "[]()" - T.length alterTab - T.length cres -1) <$> getWidth
-  let [done, all] = Prelude.map (read.T.unpack).T.split (=='/') $ cres
+  sharpWidth <- (\x -> x - T.length qn - T.length "[] " - T.length alterTab - T.length cres -1) <$> getWidth
+  let [done, all] = Prelude.map (read.T.unpack.T.takeWhile isDigit).T.split (=='/') $ cres
       sharps      = T.replicate ((fromIntegral.floor :: Double -> Int) (int2Double sharpWidth * (done / all))) "#"
       tmp         = T.replicate ((fromIntegral.floor :: Double -> Int) (int2Double sharpWidth * ((all - done) / all))) "."
   dots <- getWidth >>= \x -> return $ T.replicate (T.length tmp - (T.length sharps + T.length tmp - sharpWidth)) "."
-  printUpdate $ V.foldl1 T.append [qn, alterTab, "[", sharps, dots , "] (", T.takeWhile (/=' ') cres, ")"]
- else printUpdate $ V.foldl1 T.append [qn, alterTab, "(", T.takeWhile (/=' ') cres, ")"]
+  printUpdate $ V.foldl1 T.append [qn, alterTab, "[", sharps, dots , "] ", cres]
+ else printUpdate $ V.foldl1 T.append [qn, alterTab, T.takeWhile (/=' ') cres]
 
 printUpdate :: T.Text -> IO()
 printUpdate text = TIO.putStr "\^[[A" >> (getWidth >>= \x -> TIO.putStrLn (T.replicate x " ")) >> TIO.putStr "\^[[A" >> TIO.putStrLn text
