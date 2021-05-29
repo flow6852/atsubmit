@@ -49,11 +49,12 @@ executables:
     - condition: 'os(windows)'
       then:
         main: server-win.hs
-      else:
+        source-dirs: app/win
+      else: 
         main: server-linux.hs
+        source-dirs: app/linux
         dependencies:
         - hdaemonize
-    source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
@@ -67,8 +68,14 @@ executables:
     - uri-encode
     - filepath
   atsubmit-client:
-    main:                client.hs
-    source-dirs:         app
+    when:
+    - condition: 'os(windows)'
+      then:
+        main: client-win.hs
+        source-dirs: app/windows
+      else:
+        main: client-linux.hs
+        source-dirs: app/linux
     ghc-options:
     - -threaded
     - -rtsopts
