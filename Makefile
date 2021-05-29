@@ -7,28 +7,26 @@ LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 .PHONY: build install clean test update-all update-app update-json update-sh update-vim
 
 ifeq ($(shell uname),Linux)
-package.yaml: package-linux.yaml
-	@ln -s $< $@
+STACK_BIN = stack
 else
-package.yaml: package-win.yaml
-	@mklink $@ $<
+STACK_BIN = stack.exe
 endif
 
 build:
-	@stack build
+	@$(STACK_BIN) build
 
 test:
-	@stack test
+	@$(STACK_BIN) test
 
 install:
-	@stack build
-	@if [ ! -d $(LOCAL_BIN_PATH) ]; then mkdir $(LOCAL_BIN_PATH); fi
-	@if [ ! -d $(LOCAL_CACHE_PATH) ]; then mkdir $(LOCAL_CACHE_PATH) ; fi
-	@if [ ! -d $(LOCAL_CACHE_PATH)/src ]; then mkdir $(LOCAL_CACHE_PATH)/src ; fi
-	@if [ ! -d $(LOCAL_CONF_PATH) ]; then mkdir $(LOCAL_CONF_PATH) ; fi
-	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir $(LOCAL_LIB_PATH) ; fi
-	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir $(LOCAL_MAN_PATH) ; fi
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
+	@$(STACK_BIN) build
+	@if [ ! -d $(LOCAL_BIN_PATH) ]; then mkdir -p $(LOCAL_BIN_PATH); fi
+	@if [ ! -d $(LOCAL_CACHE_PATH) ]; then mkdir -p $(LOCAL_CACHE_PATH) ; fi
+	@if [ ! -d $(LOCAL_CACHE_PATH)/src ]; then mkdir -p $(LOCAL_CACHE_PATH)/src ; fi
+	@if [ ! -d $(LOCAL_CONF_PATH) ]; then mkdir -p $(LOCAL_CONF_PATH) ; fi
+	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir -p $(LOCAL_LIB_PATH) ; fi
+	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir -p $(LOCAL_MAN_PATH) ; fi
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
 	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
 	@if [ $(shell docker image ls atjudge_rs | wc -l) -eq 1 ]; then docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
 	@cp doc/help.man $(LOCAL_MAN_PATH)/$(BIN_NAME).man
@@ -37,16 +35,16 @@ install:
 	@echo "installed"
 
 update-all:
-	@stack build
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
+	@$(STACK_BIN) build
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
 
 update-app:
-	@stack build
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
-	@sudo install $(shell stack exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
+	@$(STACK_BIN) build
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 
 update-json:
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
@@ -66,4 +64,4 @@ test-clean:
 	@rm $(LOCAL_BIN_PATH)/$(BIN_NAME)-test
 
 clean:
-	@stack clean
+	@$(STACK_BIN) clean
