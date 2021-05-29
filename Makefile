@@ -8,12 +8,8 @@ LOCAL_LIB_PATH = $(HOME)/.local/lib/$(BIN_NAME)
 
 ifeq ($(shell uname),Linux)
 STACK_BIN = stack
-package.yaml: package-linux.yaml
-	@ln -s $< $@
 else
 STACK_BIN = stack.exe
-package.yaml: package-win.yaml
-	@mklink $@ $<
 endif
 
 build:
