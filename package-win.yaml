@@ -59,6 +59,8 @@ executables:
     - directory
     - uri-encode
     - filepath
+
+executables:
   atsubmit-client:
     main:                client.hs
     source-dirs:         app
