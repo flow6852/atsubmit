@@ -129,7 +129,6 @@ function! asvim#AtDebug(...) "AtDebug
 	call writefile(txt, tmp)
 	let cmd = "atsubmit-client debug " . expand("%") . " " . tmp
     call s:exec_cmd_term(cmd)
-    call delete(tmp)
 endfunction
 
 function! asvim#AtLogin(...) "AtLogin
@@ -140,7 +139,6 @@ function! asvim#AtLogin(...) "AtLogin
     call writefile(txt, tmp)
 	let cmd = "atsubmit-client login < " . tmp
     call s:exec_cmd_term(cmd)
-    call delete(tmp)
 endfunction
 
 function! asvim#AtResult(...) "AtResult question

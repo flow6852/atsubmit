@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
@@ -9,14 +10,19 @@ import Client
 import Types
 
 import qualified Data.Text as T
+import Data.Functor
 import System.Environment
 import System.Directory
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
 import Control.Exception
+import Control.Concurrent
 import qualified Data.List as L
 import System.Exit
 import System.FilePath
+import System.Console.Terminal.Size
+import Data.Maybe
+import GHC.Float
 
 main :: IO ()
 main = do
@@ -74,7 +80,7 @@ cGetPrint qn = if V.null qn then return ()
 
 test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 test path fn qn wd = do
- sendServer path (\x ->  evalSHelper (Test x (Source (wd </> (fn))) (QName qn)) x)
+ sendServer path (\x ->  evalSHelper (Test x (Source (wd </> fn)) (QName qn)) x)
  TIO.putStrLn "test accept."
 
 show :: FilePath -> T.Text -> IO ()
@@ -117,8 +123,11 @@ print path = do
 
 submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 submit path fn qn wd = do
- sendServer path (evalSHelper (Submit (Source (wd </> fn)) (QName qn)))
+ sid <- sendServer path (evalSHelper (Submit (Source (wd </> fn)) (QName qn)))
  TIO.putStrLn "submit."
+ TIO.putStrLn ""
+ threadDelay $ 3000 * 1000
+ resultRealtime path (T.takeWhile (/= '_') qn) qn  (Just sid)
 
 debug :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
 debug path src din wd = do
@@ -133,8 +142,14 @@ debug path src din wd = do
 
 result :: FilePath -> T.Text -> IO ()
 result path cn = do
- result <- sendServer path (evalSHelper (Result (CName cn)))
- case result of CResult res -> mapM_ (TIO.putStrLn.T.intercalate " ") res
+ res <- sendServer path (evalSHelper (Result (CName cn) Nothing))
+ let cres = case res of CResult tmp -> tmp
+     sids = Prelude.map (\x -> if T.isInfixOf (T.singleton '/') (x!!8) || "WJ" == (x!!8)then Just (head x) else Nothing) $ Prelude.tail cres
+ if all isNothing sids  then printResult cres
+ else printResult cres >> threadDelay (1000 * 1000) >> putStrLn "" >> resultRealtime path cn (((!!2).Prelude.head.Prelude.tail) cres) ((toMaybeSid.Prelude.head) sids)
+ where
+  printResult =  mapM_ (TIO.putStrLn.T.intercalate " ")
+  toMaybeSid (Just a) = Just (Sid a)
 
 log :: FilePath -> IO()
 log path = do
@@ -171,9 +186,9 @@ log path = do
       -> V.foldl1 T.append ["Show ", qn, " : Ok"]
     (SHelperServerRequest (ShowReq (QName qn)), SHelperErr res)
       -> V.foldl1 T.append ["Show ", qn, " : Err ", (fst.exceptionText) res]
-    (SHelperServerRequest (ResultReq (CName cn)), SHelperOk res)
+    (SHelperServerRequest (ResultReq (CName cn) _), SHelperOk res)
       -> V.foldl1 T.append ["Result ", cn, " : Ok"]
-    (SHelperServerRequest (ResultReq (CName cn)), SHelperErr res)
+    (SHelperServerRequest (ResultReq (CName cn) _), SHelperErr res)
       -> V.foldl1 T.append ["Result ", cn, " : Err ", (fst.exceptionText) res]
     (SHelperServerRequest LogoutReq, SHelperOk res) -> "Logout : Ok"
     (SHelperServerRequest LogoutReq, SHelperErr res) -> T.append "Logout : Err " $ (fst.exceptionText) res
@@ -194,6 +209,33 @@ logout :: FilePath -> IO()
 logout path = do
  sendServer path (evalSHelper Logout)
  TIO.putStrLn "logout accept."
+
+resultRealtime :: FilePath -> T.Text -> T.Text -> Maybe Sid -> IO()
+resultRealtime path cn qn sids = do
+ res <- sendServer path (evalSHelper (Result (CName cn) sids))
+ let cres = case res of CResult tmp -> T.takeWhile (/=' ').T.takeWhile (/='<').(!!2).T.split (=='>').Prelude.head.Prelude.head $ tmp
+ if T.isInfixOf "/" cres || cres == "WJ" then printRealtime qn cres >> threadDelay (1000 * interval res) >> resultRealtime path cn qn sids
+                                         else printUpdate $ V.foldl1 T.append [qn, "    ", cres]
+
+alterTab = "    "
+
+printRealtime :: T.Text -> T.Text -> IO()
+printRealtime qn cres = if T.isInfixOf "/" cres then do
+  sharpWidth <- (\x -> x - T.length qn - T.length "[]()" - T.length alterTab - T.length cres -1) <$> getWidth
+  let [done, all] = Prelude.map (read.T.unpack).T.split (=='/') $ cres
+      sharps      = T.replicate ((fromIntegral.floor :: Double -> Int) (int2Double sharpWidth * (done / all))) "#"
+      tmp         = T.replicate ((fromIntegral.floor :: Double -> Int) (int2Double sharpWidth * ((all - done) / all))) "."
+  dots <- getWidth >>= \x -> return $ T.replicate (T.length tmp - (T.length sharps + T.length tmp - sharpWidth)) "."
+  printUpdate $ V.foldl1 T.append [qn, alterTab, "[", sharps, dots , "] (", T.takeWhile (/=' ') cres, ")"]
+ else printUpdate $ V.foldl1 T.append [qn, alterTab, "(", T.takeWhile (/=' ') cres, ")"]
+
+printUpdate :: T.Text -> IO()
+printUpdate text = TIO.putStr "\^[[A" >> (getWidth >>= \x -> TIO.putStrLn (T.replicate x " ")) >> TIO.putStr "\^[[A" >> TIO.putStrLn text
+
+getWidth :: IO Int
+getWidth = size Data.Functor.<&> (\case Just Window {height = a, width = b} -> fromIntegral b :: Int)
+
+interval res = case res of CResult tmp -> read.T.unpack.T.tail.T.takeWhile (/= ',').T.dropWhile (/=':').Prelude.head.Prelude.head $ tmp
 
 exceptionExit :: SHelperException -> IO ()
 exceptionExit e = TIO.putStrLn ((fst.exceptionText) e) >> exitWith (ExitFailure ((snd.exceptionText) e))

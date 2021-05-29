@@ -42,6 +42,7 @@ library:
           - unbounded-delays
           - containers
           - filepath
+          - string-conversions
 executables:
   atsubmit-server:
     main:                server-linux.hs
@@ -75,6 +76,7 @@ executables:
     - directory
     - uri-encode
     - filepath
+    - terminal-size
 
 tests:
   atsubmit-test:

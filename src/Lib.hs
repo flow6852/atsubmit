@@ -18,7 +18,6 @@ import Network.HTTP.Simple
 import Network.HTTP.Types.Header
 import Network.HTTP.Conduit
 import qualified Network.Socket.ByteString as NSBS
-import qualified Network.URI.Encode as NUE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Bifunctor
@@ -197,4 +196,3 @@ snwl curs = case node curs of NodeElement e -> case (nameLocalName.elementName) 
                               _             -> content curs
  where
   snocons = L.map ((`T.snoc` '$').T.cons '$').content
-
