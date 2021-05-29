@@ -34,6 +34,7 @@ newtype RLog = RLog (SHelperServerRequest, SHelperServerResponse) deriving (Show
 newtype Lang = Lang T.Text deriving (Show, Eq)
 newtype Id = Id T.Text deriving (Show, Eq)
 newtype LanguageId = LanguageId (Id, Lang) deriving (Show, Eq)
+newtype Sid = Sid T.Text deriving (Show, Eq)
 data GetResult = GetResultOk QName 
                | FromLocal QName
                | AlreadyGet QName
@@ -71,11 +72,11 @@ data SHelper a where
         QGet   :: V.Vector QName -> Userdir -> SHelper (V.Vector GetResult) -- 問題名を受け取って問題を入手する.ContestStateのQuestionsを更新.
         CGet   :: V.Vector CName -> Userdir -> SHelper (V.Vector GetResult) -- コンテスト名を受け取ってそれに所属する問題のすべてを入手する.
         Test   :: Socket -> Source -> QName -> SHelper ()-- ファイルと問題名を受け取って結果を出力する. 
-        Submit :: Source -> QName -> SHelper () -- ファイルと問題名を受け取って提出する.
+        Submit :: Source -> QName -> SHelper Sid -- ファイルと問題名を受け取って提出する.
         Debug  :: Source -> DIn -> SHelper DebugBodyRes -- ファイルと入力を受け取って出力を返す.
         Print  :: SHelper (V.Vector QName) -- ContestStateのQuestionsのすべてを返す.
         Show   :: QName -> SHelper Question -- 問題を受け取ってその問題入出力を返す.
-        Result :: CName -> SHelper CResult -- コンテストを受け取ってコンテストの結果を出力する.
+        Result :: CName -> Maybe Sid -> SHelper CResult -- コンテストを受け取ってコンテストの結果を出力する.
         Log    :: SHelper (V.Vector RLog) -- ログの出力
         LangId :: Lang -> SHelper (V.Vector LanguageId) -- data.LanguageIdの表示
         Stop   :: SHelper ()
@@ -91,7 +92,7 @@ data SHelperRequest
         | DebugReq Source DIn
         | PrintReq
         | ShowReq QName
-        | ResultReq CName
+        | ResultReq CName (Maybe Sid)
         | LogReq 
         | LangIdReq Lang
         | StopReq
@@ -104,7 +105,7 @@ data SHelperResponse
         | QGetRes (V.Vector GetResult)
         | CGetRes (V.Vector GetResult)
         | TestRes ()
-        | SubmitRes ()
+        | SubmitRes Sid
         | DebugRes DebugBodyRes
         | PrintRes (V.Vector QName)
         | ShowRes Question
@@ -183,6 +184,7 @@ deriveJSON defaultOptions ''GetResult
 deriveJSON defaultOptions ''Id
 deriveJSON defaultOptions ''Lang
 deriveJSON defaultOptions ''LanguageId
+deriveJSON defaultOptions ''Sid
 deriveJSON defaultOptions ''SHelperResponse
 deriveJSON defaultOptions ''SHelperRequest
 deriveJSON defaultOptions ''SHelperServerRequest

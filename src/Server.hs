@@ -20,6 +20,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.List as L
 import qualified Data.Map as M
+import Data.String.Conversions
 import Text.HTML.DOM
 import qualified Text.XML as TX
 import Text.XML.Cursor
@@ -113,8 +114,8 @@ actionSHelper contest sock (SHelperServerRequest request) = do
         ShowReq qname -> do
                 result <- evalSHelper contest (Show qname)
                 return $ SHelperOk (ShowRes result)
-        ResultReq cname -> do
-                result <- evalSHelper contest (Result cname)
+        ResultReq cname a -> do
+                result <- evalSHelper contest (Result cname a)
                 return $ SHelperOk (ResultRes result)
         LogReq -> do
                 result <- evalSHelper contest Log
@@ -152,8 +153,8 @@ requestCheck (DebugReq (Source source) (DIn din)) = doesFileExist source >>= \x 
 requestCheck PrintReq = return Ok
 requestCheck (ShowReq (QName "")) =  return $ Err "don't set question name."
 requestCheck (ShowReq qname) = return Ok
-requestCheck (ResultReq (CName "")) = return $ Err "don't set contest name."
-requestCheck (ResultReq cname) = return Ok
+requestCheck (ResultReq (CName "") _) = return $ Err "don't set contest name."
+requestCheck (ResultReq cname _) = return Ok
 requestCheck LogReq = return Ok
 requestCheck (LangIdReq _) = return Ok
 requestCheck StopReq = return Ok
@@ -235,7 +236,8 @@ evalSHelper mvcont (Submit (Source source) (QName qn)) = do
  let cn = T.takeWhile (/='_') qn
      questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submit"]
  res <- postRequestWrapper questurl (homedir contest) [ ("data.TaskScreenName", qn), ("data.LanguageId", langid lang), ("sourceCode", src), ("csrf_token", csrf_token contest)]
- return ()
+ let sid = (Prelude.head.getsids.fromDocument.parseLBS.getResponseBody) res
+ return (Sid sid)
 
 evalSHelper mvcont (Types.Debug (Source source) (DIn din)) = do
  contest <- readMVar mvcont
@@ -263,15 +265,21 @@ evalSHelper mvcont (Show (QName qn)) = do
  case mquest of Nothing -> throwIO $ NotGetQuestion (QName qn)
                 Just a  -> return a
 
-evalSHelper mvcont (Result (CName cn)) = do
+evalSHelper mvcont (Result (CName cn) Nothing) = do
  contest <- readMVar mvcont
  res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submissions/me"]) (homedir contest)
  when (getResponseStatus res /= status200) $ throwIO Unknown
- return $ CResult $ result.fromDocument.parseLBS.getResponseBody $ res
-  where
-   result :: Cursor -> [[T.Text]]
-   result cursor = Prelude.map ((Prelude.filter (not.T.isInfixOf "\n").Prelude.concatMap scrapeNodes).child) $ cursor $// attributeIs "class" "table-responsive"
-                                                                                                                      &// element "tr"
+ let results = result.fromDocument.parseLBS.getResponseBody $ res
+ let gids = "submit id":(getsids.fromDocument.parseLBS.getResponseBody) res
+ return $ CResult $ appendWith gids results
+
+evalSHelper mvcont (Result (CName cn) (Just (Sid sid))) = do
+ contest <- readMVar mvcont
+ res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submissions/me/status/json?reload=true&sids%5B%5D=", sid]) (homedir contest)
+ when (getResponseStatus res /= status200) $ throwIO Unknown
+ let results = escapeGT.escapeLT.decodeUtf8.BSL.toStrict.getResponseBody $ res
+ return $ CResult [[results]]
+
 
 evalSHelper mvcont Stop = do
  contest <- readMVar mvcont
@@ -383,3 +391,24 @@ nToE (TX.NodeElement e) = e
 
 nToContent :: TX.Node -> T.Text
 nToContent (TX.NodeContent t) = t
+
+escapeGT = T.replace "\\u003c" "<"
+escapeLT = T.replace "\\u003e" ">"
+
+result :: Cursor -> [[T.Text]]
+result cursor = Prelude.map ((Prelude.filter (not.T.isInfixOf "\n").Prelude.concatMap scrapeNodes).child) $ cursor $// attributeIs "class" "table-responsive"
+                                                                                                                   &// element "tr"
+getsid :: TX.Node -> Maybe T.Text
+getsid (TX.NodeElement elem) = M.lookup TX.Name {TX.nameLocalName = "data-id", TX.nameNamespace = Nothing, TX.namePrefix = Nothing}.TX.elementAttributes $ elem
+
+getsids :: Cursor -> [T.Text]
+getsids cursor = Prelude.tail.Prelude.map (Prelude.head.rmMaybe.Prelude.map (getsid.node).Prelude.filter (L.all (not.T.isInfixOf "\n").scrapeNodes).child) $ cursor $// attributeIs "class" "table-responsive" &// element "tr"
+
+rmMaybe :: [Maybe a] -> [a]
+rmMaybe [] = []
+rmMaybe (Nothing:xs) = rmMaybe xs
+rmMaybe ((Just a):xs) = a:rmMaybe xs 
+
+appendWith :: [a] -> [[a]] -> [[a]]
+appendWith [] [] = []
+appendWith (a:as) (b:bs) = (a:b):appendWith as bs
