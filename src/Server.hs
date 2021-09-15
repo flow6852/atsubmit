@@ -214,8 +214,8 @@ evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
   testLoop c qs func main = if V.null qs then return () else do
    TIO.writeFile (input_file c) $ (fst.V.head) qs
    ec <- func main
-   outres <- TIO.readFile (output_file c)
-   comp <- TIO.readFile (compile_file c)
+   outres <- rdFile (output_file c)
+   comp <- rdFile (compile_file c)
    let res = case ec of
                     Just 0  -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs)
                              then AC
@@ -228,6 +228,8 @@ evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
    case res of CE comp -> return ()
                IE      -> throwIO InternalError
                _       -> testLoop c (V.tail qs) func main
+  rdFile :: FilePath -> IO T.Text
+  rdFile path = doesFileExist path >>= \x -> if x then TIO.readFile path else return "" 
 
 evalSHelper mvcont (Submit (Source source) (QName qn)) = do
  contest <- readMVar mvcont
@@ -329,13 +331,14 @@ getPageInfo (QName qn) userdir contest =
  else doesFileExist fname >>= \fcheck -> 
   if fcheck then Text.HTML.DOM.readFile fname >>= \res -> return (FromLocal (QName qn), newQuest res)
   else getRequestWrapper questurl (homedir contest) >>= \res ->
-   if getResponseStatus res /= status200 then return (QuestionNotExist (QName qn), nullQuestion)
-   else do
-    TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)
-    return (GetResultOk (QName qn), (newQuest.parseLBS.getResponseBody) res)
+    if getResponseStatus res /= status200 then return (QuestionNotExist (QName qn), nullQuestion)
+    else do
+     (doesDirectoryExist.dropFileName) fname >>= \flg -> unless flg $ (createDirectory.dropFileName) fname
+     TIO.writeFile fname ((rewriteHtml.decodeUtf8.BSL.toStrict.getResponseBody) res)
+     return (GetResultOk (QName qn), (newQuest.parseLBS.getResponseBody) res)
  where
   questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", T.takeWhile (/='_') qn, "/tasks/", qn]
-  fname = T.unpack (V.foldl1 T.append [T.pack userdir, "/", qn, ".html"])
+  fname = normalise $ joinPath [userdir, "question-html/" , T.unpack qn <.> ".html"]
   newQuest raw = do
    let base = Prelude.head $ fromDocument raw $// attributeIs "class" "lang-ja"
        qsent = questionSentence base

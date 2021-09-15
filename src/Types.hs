@@ -126,6 +126,7 @@ data SHelperException
         | JsonParseError
         | InputErr
         | InternalError
+        | FileNotExists FilePath
         | Unknown 
         deriving(Show, Typeable, Eq)
 
