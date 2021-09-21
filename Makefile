@@ -36,8 +36,10 @@ install:
 
 update-all:
 	@$(STACK_BIN) build
-	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
-	@if [ $(shell docker image ls atjudge_rs | wc -l) -eq 1 ]; then docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
+	@docker rmi atsubmit_rs
+	@docker rmi atsubmit_hs
+	@docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
+	@docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
 	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
 	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
