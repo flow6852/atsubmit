@@ -250,4 +250,4 @@ exceptionText e = case e of
  JsonParseError -> ("json parse error.", 4)
  InputErr -> ("input error.", 4)
  InternalError -> ("internal error.", 5)
- Unknown -> ("unknown.", 6)
+ Unknown txt -> (T.append "unknown : " txt, 6)

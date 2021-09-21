@@ -79,7 +79,7 @@ server action sock = do
 actionSHelper :: MVar Contest -> Socket -> SHelperServerRequest -> IO SHelperServerResponse
 actionSHelper contest sock (SHelperServerRequest request) = do
  ret <- requestHandler `catch` \(e :: SHelperException) -> return (SHelperErr e)
-                       `catch` \(e :: SomeException) -> return (SHelperErr Unknown)
+                       `catch` \(e :: SomeException) -> return (SHelperErr (Unknown ((T.pack.show) e)))
  let req = case request of LoginReq username password -> LoginReq (Username "") (Password "")
                            _                          -> request
  cnt <- readMVar contest
@@ -205,11 +205,11 @@ evalSHelper mvcont (Test sock (Source (wd, src)) (QName qn)) = do
  let (compcmd, execmd, stopcmd) = if is_docker lang then (compileWithContainer,execWithContainer, stopContainer)
                                                     else (compileWithoutContainer, execWithoutContainer, stopWithoutContainer)
  let mquest = V.find ((== qn).T.takeWhileEnd (/='/').qurl) $ questions contest
- compStatus <- compcmd contest (Source (wd, src)) lang `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
+ compStatus <- compcmd contest (Source (wd, src)) lang
  case (mquest, compStatus) of 
   (Nothing, _) -> throwIO $ NotGetQuestion (QName qn) -- not getting
-  (Just a, "") -> testLoop contest (qiosample a) execmd lang >> stopcmd `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
-  (Just a, msg) -> void $ sendMsg sock ((toStrict.DA.encode) (CE (Message msg))) 1024 >> stopcmd
+  (Just a, "") -> E.finally (testLoop contest (qiosample a) execmd lang) stopcmd
+  (Just a, msg) -> E.finally (void (sendMsg sock ((toStrict.DA.encode) (CE (Message msg))) 1024)) stopcmd
  where
   testLoop :: Contest -> V.Vector (T.Text, T.Text) -> (Contest -> Source -> LangJson -> IO (Maybe Int)) -> LangJson ->  IO ()
   testLoop c qs func lang = if V.null qs then return () else do
@@ -245,13 +245,13 @@ evalSHelper mvcont (Types.Debug (Source (wd, src)) (DIn din)) = do
  copyFile din (input_file contest) 
  let (compcmd, execmd, stopcmd) = if is_docker lang then (compileWithContainer,execWithContainer, stopContainer)
                                                     else (compileWithoutContainer, execWithoutContainer, stopWithoutContainer)
- compStatus <- compcmd contest (Source (wd, src)) lang `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
+ compStatus <- compcmd contest (Source (wd, src)) lang
  case compStatus of 
   "" -> do
-   ec <- execmd contest (Source (wd, src)) lang `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
-   stopcmd
+   ec <- execmd contest (Source (wd, src)) lang
    outres <- TIO.readFile (output_file contest)
    dinp <- TIO.readFile (input_file contest)
+   stopcmd
    return $ case ec of Just 0  -> DAC (DOut outres)
                        Just 2  -> DRE
                        Just _  -> DTLE
@@ -273,7 +273,7 @@ evalSHelper mvcont (Show (QName qn)) = do
 evalSHelper mvcont (Result (CName cn) Nothing) = do
  contest <- readMVar mvcont
  res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submissions/me"]) (homedir contest)
- when (getResponseStatus res /= status200) $ throwIO Unknown
+ when (getResponseStatus res /= status200) $ throwIO (RequestNot200 ((statusCode.getResponseStatus) res))
  let results = result.fromDocument.parseLBS.getResponseBody $ res
  let gids = "submit id":(getsids.fromDocument.parseLBS.getResponseBody) res
  return $ CResult $ appendWith gids results
@@ -281,7 +281,7 @@ evalSHelper mvcont (Result (CName cn) Nothing) = do
 evalSHelper mvcont (Result (CName cn) (Just (Sid sid))) = do
  contest <- readMVar mvcont
  res <- getRequestWrapper (V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submissions/me/status/json?reload=true&sids%5B%5D=", sid]) (homedir contest)
- when (getResponseStatus res /= status200) $ throwIO Unknown
+ when (getResponseStatus res /= status200) $ throwIO (RequestNot200 ((statusCode.getResponseStatus) res))
  let results = escapeGT.escapeLT.decodeUtf8.BSL.toStrict.getResponseBody $ res
  return $ CResult [[results]]
 
@@ -312,7 +312,7 @@ evalSHelper mvcont (LangId (Lang lang)) = do
 evalSHelper mvcont Logout = do
  contest <- readMVar mvcont
  res <- postRequestWrapper "https://atcoder.jp/logout" (homedir contest) [("csrf_token", csrf_token contest)]
- when (getResponseStatus res /= status200) $ throwIO Unknown
+ when (getResponseStatus res /= status200) $ throwIO(RequestNot200 ((statusCode.getResponseStatus) res))
  rmFile $ homedir contest </> cookieFile
  swapMVar mvcont $ contest {csrf_token = "" }
  return ()

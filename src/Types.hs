@@ -126,7 +126,8 @@ data SHelperException
         | InputErr
         | InternalError
         | FileNotExists FilePath
-        | Unknown 
+        | Unknown T.Text
+        | RequestNot200 Int
         deriving(Show, Typeable, Eq)
 
 instance Exception SHelperException

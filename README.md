@@ -131,6 +131,11 @@ $ atsubmit-client stop
 
 atsubmit-serverを停止します.
 
+# コンパイルコマンドや実行コマンド
+
+`.config/atsubmit/lang_conf.json`の`docker_comp`や`docker_exec`でコンテナ内で実行されるコンパイルコマンドや実行コマンドを，`compile`や`exec`でコンテナ外で実行されるコマンドを変更できる．ユーザのソースは`/home/Main.(拡張子)`．
+
+
 # vimプラグイン
 
 エディタのプラグインの一例としてvimのプラグインがあります.

@@ -75,8 +75,8 @@ getAPIkeys (m:messages) = do
  getAPIkeys messages >>= (\res -> return (api:res))
 
 recvMsg :: Socket -> Int -> IO S.ByteString
-recvMsg sock n = do
- json <- fromStrict <$> NSBS.recv sock n
+recvMsg sock n = do 
+ json <- fromStrict <$> NSBS.recv sock n 
  case DA.decode json of
   Just size -> do
    NSBS.send sock $ toStrict.DA.encode $ size {socksize = min (socksize size) n} -- deside receive size
@@ -89,6 +89,7 @@ recvMsg sock n = do
       if S.length msg + i >= datasize size then NSBS.send sock (toStrict "end") >> return [msg]
       else recvLoop k (S.length msg + i) >>= \next -> return (msg:next)
   _         -> return S.empty
+ `catch` (\(SomeException e) -> throwIO e)
 
 sendMsg :: Socket -> S.ByteString -> Int -> IO BS.ByteString
 sendMsg sock msg n = do
@@ -97,6 +98,7 @@ sendMsg sock msg n = do
  case raw of Just json -> case (DA.decode.fromStrict) json of Just size -> sendLoop (takeNList (socksize size) msg)
                                                               _         -> return BS.empty
              Nothing   -> sendMsg sock msg n -- resend timeout
+ `catch` (\(SomeException e) -> throwIO e)
  where
   sendLoop :: [S.ByteString] -> IO BS.ByteString
   sendLoop m = do 

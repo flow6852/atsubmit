@@ -16,6 +16,7 @@ import System.IO
 import System.Posix.Daemonize
 import System.FilePath
 import Control.Concurrent
+import Control.Exception
 
 main :: IO ()
 main = do

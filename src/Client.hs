@@ -48,7 +48,7 @@ evalSHelper (Login user pass) sock = do
   case DA.decode raw of
    Just (SHelperOk (LoginRes unit)) -> return unit
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (QGet qname udir) sock = do
   sendMsg sock ((toStrict.DA.encode) (QGetReq qname udir)) 1024
@@ -56,7 +56,7 @@ evalSHelper (QGet qname udir) sock = do
   case DA.decode raw of
    Just (SHelperOk (QGetRes qn)) -> return qn
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (CGet cname udir) sock = do
   sendMsg sock ((toStrict.DA.encode) (CGetReq cname udir)) 1024
@@ -64,7 +64,7 @@ evalSHelper (CGet cname udir) sock = do
   case DA.decode raw of
    Just (SHelperOk (CGetRes cn)) -> return cn
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (Test _ source qname) sock = do
   sendMsg sock ((toStrict.DA.encode) (TestReq source qname)) 1024
@@ -72,7 +72,7 @@ evalSHelper (Test _ source qname) sock = do
   case DA.decode raw of
    Just (SHelperOk (TestRes unit)) -> return unit
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (Submit source qname) sock = do
   sendMsg sock ((toStrict.DA.encode) (SubmitReq source qname)) 1024
@@ -80,7 +80,7 @@ evalSHelper (Submit source qname) sock = do
   case DA.decode raw of
    Just (SHelperOk (SubmitRes unit)) -> return unit
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (Types.Debug source din) sock = do
   sendMsg sock ((toStrict.DA.encode) (DebugReq source din)) 1024
@@ -88,7 +88,7 @@ evalSHelper (Types.Debug source din) sock = do
   case DA.decode raw of
    Just (SHelperOk (DebugRes dbody)) -> return dbody
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper Print sock = do
   sendMsg sock ((toStrict.DA.encode) PrintReq) 1024
@@ -96,7 +96,7 @@ evalSHelper Print sock = do
   case DA.decode raw of
    Just (SHelperOk (PrintRes pr)) -> return pr
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (Show qname) sock = do
   sendMsg sock ((toStrict.DA.encode) (ShowReq qname)) 1024
@@ -104,7 +104,7 @@ evalSHelper (Show qname) sock = do
   case DA.decode raw of
    Just (SHelperOk (ShowRes question)) -> return question
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (Result cname sid) sock = do
   sendMsg sock ((toStrict.DA.encode) (ResultReq cname sid)) 1024
@@ -112,7 +112,7 @@ evalSHelper (Result cname sid) sock = do
   case DA.decode raw of
    Just (SHelperOk (ResultRes cr)) -> return cr
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper Log sock = do
   sendMsg sock ((toStrict.DA.encode) LogReq) 1024
@@ -120,7 +120,7 @@ evalSHelper Log sock = do
   case DA.decode raw of
    Just (SHelperOk (LogRes ret)) -> return ret
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper (LangId lang) sock = do
  sendMsg sock ((toStrict.DA.encode) (LangIdReq lang)) 1024
@@ -128,7 +128,7 @@ evalSHelper (LangId lang) sock = do
  case DA.decode raw of
   Just (SHelperOk (LangIdRes lid)) -> return lid
   Just (SHelperErr e) -> throwIO e 
-  _ -> throwIO Unknown
+  _ -> throwIO (Unknown "decode error")
 
 evalSHelper Stop sock = do
   sendMsg sock ((toStrict.DA.encode) StopReq) 1024
@@ -136,7 +136,7 @@ evalSHelper Stop sock = do
   case DA.decode raw of
    Just (SHelperOk (StopRes unit)) -> return unit
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 evalSHelper Logout sock = do
   sendMsg sock ((toStrict.DA.encode) LogoutReq) 1024
@@ -144,7 +144,7 @@ evalSHelper Logout sock = do
   case DA.decode raw of
    Just (SHelperOk (LogoutRes unit)) -> return unit
    Just (SHelperErr e) -> throwIO e 
-   _ -> throwIO Unknown
+   _ -> throwIO (Unknown "decode error")
 
 testRsvloop :: Socket -> Int -> IO ByteString
 testRsvloop sock size = do
