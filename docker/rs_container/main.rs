@@ -1,0 +1,43 @@
+use alga;
+use ascii;
+use bitset_fixed;
+use either;
+use fixedbitset;
+use getrandom;
+use im_rc;
+use indexmap;
+use itertools;
+use itertools_num;
+use lazy_static;
+use libm;
+use maplit;
+use nalgebra;
+use ndarray;
+use num;
+use num_bigint;
+use num_complex;
+use num_derive;
+use num_integer;
+use num_iter;
+use num_rational;
+use num_traits;
+use ordered_float;
+use permutohedron;
+use petgraph;
+use proconio;
+use rand;
+use rand_chacha;
+use rand_core;
+use rand_distr;
+use rand_hc;
+use rand_pcg;
+use regex;
+use rustc_hash;
+use smallvec;
+use superslice;
+use text_io;
+use whiteread;
+
+fn main() {
+    println!("Hello World.");
+}

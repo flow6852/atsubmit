@@ -140,16 +140,16 @@ requestCheck (QGetReq qname userdir) = return Ok
 requestCheck (CGetReq [] _) = return $ Err "don't set contest name." 
 requestCheck (CGetReq _ (Userdir "")) = return $ Err "don't set user working directory."
 requestCheck (CGetReq cname userdir) = return  Ok
-requestCheck (TestReq (Source "") _) = return $ Err "don't set source file."
+requestCheck (TestReq (Source (_, "")) _) = return $ Err "don't set source file."
 requestCheck (TestReq _ (QName "")) =  return $ Err "don't set question name."
-requestCheck (TestReq (Source source) qname) = doesFileExist source >>= \x -> return $ if x then Ok else Err $ fileNotExists source
-requestCheck (SubmitReq (Source "") _) = return $ Err "don't set source file."
+requestCheck (TestReq (Source (wd, src)) qname) = doesFileExist (wd </> src) >>= \x -> return $ if x then Ok else Err $ fileNotExists (wd </> src)
+requestCheck (SubmitReq (Source (_, "")) _) = return $ Err "don't set source file."
 requestCheck (SubmitReq _ (QName "")) = return $ Err "don't set question name."
-requestCheck (SubmitReq (Source source) qname) = doesFileExist source >>= \x -> return $ if x then Ok else Err $ fileNotExists source
-requestCheck (DebugReq (Source "") _) = return $ Err "don't set source file."
+requestCheck (SubmitReq (Source (wd, src)) qname) = doesFileExist (wd </> src) >>= \x -> return $ if x then Ok else Err $ fileNotExists (wd </> src)
+requestCheck (DebugReq (Source (_, "")) _) = return $ Err "don't set source file."
 requestCheck (DebugReq _ (DIn "")) = return $ Err "don't set debug file."
-requestCheck (DebugReq (Source source) (DIn din)) = doesFileExist source >>= \x -> doesFileExist din >>= \y -> 
-        return $ if x then if y then Ok else Err (fileNotExists din) else Err $ fileNotExists source
+requestCheck (DebugReq (Source (wd, src)) (DIn din)) = doesFileExist (wd </> src) >>= \x -> doesFileExist din >>= \y -> 
+        return $ if x then if y then Ok else Err (fileNotExists din) else Err $ fileNotExists (wd </> src)
 requestCheck PrintReq = return Ok
 requestCheck (ShowReq (QName "")) =  return $ Err "don't set question name."
 requestCheck (ShowReq qname) = return Ok
@@ -199,39 +199,37 @@ evalSHelper mvcont (CGet cn (Userdir ud)) = do
  swapMVar mvcont $ contest {questions = questions contest V.++ (V.filter (/=nullQuestion).V.concat.V.toList) quests}
  return $ (V.concat.V.toList) res
 
-evalSHelper mvcont (Test sock (Source source) (QName qn)) = do
+evalSHelper mvcont (Test sock (Source (wd, src)) (QName qn)) = do
  contest <- readMVar mvcont
- lang <- languageSelect (homedir contest) source
- let func = if is_docker lang then useDockerTest (docker_image lang) contest
-                              else unUseDocker (compile lang) (exec lang) contest
- copyFile source (main_file contest)
+ lang <- languageSelect (homedir contest) src
+ let (compcmd, execmd, stopcmd) = if is_docker lang then (compileWithContainer,execWithContainer, stopContainer)
+                                                    else (compileWithoutContainer, execWithoutContainer, stopWithoutContainer)
  let mquest = V.find ((== qn).T.takeWhileEnd (/='/').qurl) $ questions contest
- case mquest of Nothing -> throwIO $ NotGetQuestion (QName qn) -- not getting
-                Just a  -> testLoop contest (qiosample a) func (T.append "Main." ((V.head.extention) lang))
-                            `catch` \(e :: SHelperException) -> throwIO e
+ compStatus <- compcmd contest (Source (wd, src)) lang `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
+ case (mquest, compStatus) of 
+  (Nothing, _) -> throwIO $ NotGetQuestion (QName qn) -- not getting
+  (Just a, "") -> testLoop contest (qiosample a) execmd lang >> stopcmd `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
+  (Just a, msg) -> void $ sendMsg sock ((toStrict.DA.encode) (CE (Message msg))) 1024 >> stopcmd
  where
-  testLoop :: Contest -> V.Vector (T.Text, T.Text) -> (T.Text -> IO (Maybe Int)) -> T.Text -> IO ()
-  testLoop c qs func main = if V.null qs then return () else do
+  testLoop :: Contest -> V.Vector (T.Text, T.Text) -> (Contest -> Source -> LangJson -> IO (Maybe Int)) -> LangJson ->  IO ()
+  testLoop c qs func lang = if V.null qs then return () else do
    TIO.writeFile (input_file c) $ (fst.V.head) qs
-   ec <- func main
+   ec <- func c (Source (wd, src)) lang
    outres <- rdFile (output_file c)
-   comp <- rdFile (compile_file c)
    let res = case ec of
                     Just 0  -> if checkResult (T.lines outres) ((T.lines.snd.V.head) qs)
                              then AC
                              else WA (TOut outres) (TAns ((snd.V.head) qs))
-                    Just 1  -> CE (Message comp)
                     Just 2  -> RE
                     Just _  -> TLE
                     Nothing -> IE
    sendMsg sock ((toStrict.DA.encode) res) 1024
-   case res of CE comp -> return ()
-               IE      -> throwIO InternalError
-               _       -> testLoop c (V.tail qs) func main
+   case res of IE      -> throwIO InternalError
+               _       -> testLoop c (V.tail qs) func lang
   rdFile :: FilePath -> IO T.Text
   rdFile path = doesFileExist path >>= \x -> if x then TIO.readFile path else return "" 
 
-evalSHelper mvcont (Submit (Source source) (QName qn)) = do
+evalSHelper mvcont (Submit (Source (wd, source)) (QName qn)) = do
  contest <- readMVar mvcont
  src <- TIO.readFile source
  lang <- languageSelect (homedir contest) source
@@ -241,21 +239,26 @@ evalSHelper mvcont (Submit (Source source) (QName qn)) = do
  let sid = (Prelude.head.getsids.fromDocument.parseLBS.getResponseBody) res
  return (Sid sid)
 
-evalSHelper mvcont (Types.Debug (Source source) (DIn din)) = do
+evalSHelper mvcont (Types.Debug (Source (wd, src)) (DIn din)) = do
  contest <- readMVar mvcont
- lang <- languageSelect (homedir contest) source
- copyFile source (main_file contest)
+ lang <- languageSelect (homedir contest) src
  copyFile din (input_file contest) 
- ec <- if is_docker lang then useDockerTest (docker_image lang) contest (T.append "Main." ((V.head.extention) lang))
-                         else unUseDocker (compile lang) (exec lang) contest (T.append "Main." ((V.head.extention) lang))
- outres <- TIO.readFile (output_file contest)
- comp <- TIO.readFile (compile_file contest) 
- dinp <- TIO.readFile (input_file contest)
- return $ case ec of Just 0  -> DAC (DOut outres)
-                     Just 1  -> DCE (Message comp)
-                     Just 2  -> DRE
-                     Just _  -> DTLE
-                     Nothing -> DIE
+ let (compcmd, execmd, stopcmd) = if is_docker lang then (compileWithContainer,execWithContainer, stopContainer)
+                                                    else (compileWithoutContainer, execWithoutContainer, stopWithoutContainer)
+ compStatus <- compcmd contest (Source (wd, src)) lang `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
+ case compStatus of 
+  "" -> do
+   ec <- execmd contest (Source (wd, src)) lang `catch` \(e :: SHelperException) -> stopcmd >> throwIO e
+   stopcmd
+   outres <- TIO.readFile (output_file contest)
+   dinp <- TIO.readFile (input_file contest)
+   return $ case ec of Just 0  -> DAC (DOut outres)
+                       Just 2  -> DRE
+                       Just _  -> DTLE
+                       Nothing -> DIE
+  msg -> do 
+   stopcmd 
+   return $ DCE (Message msg)
 
 evalSHelper mvcont Print = do
  contest <- readMVar mvcont 

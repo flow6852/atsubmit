@@ -81,7 +81,7 @@ cGetPrint qn = if V.null qn then return ()
 
 test :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 test path fn qn wd = do
- sendServer path (\x ->  evalSHelper (Test x (Source (wd </> fn)) (QName qn)) x)
+ sendServer path (\x ->  evalSHelper (Test x (Source (wd, fn)) (QName qn)) x)
  TIO.putStrLn "test accept."
 
 show :: FilePath -> T.Text -> IO ()
@@ -124,7 +124,7 @@ print path = do
 
 submit :: FilePath -> FilePath -> T.Text -> FilePath -> IO ()
 submit path fn qn wd = do
- sid <- sendServer path (evalSHelper (Submit (Source (wd </> fn)) (QName qn)))
+ sid <- sendServer path (evalSHelper (Submit (Source (wd, fn)) (QName qn)))
  TIO.putStrLn "submit."
  TIO.putStrLn ""
  printUpdate $ V.foldl1 T.append [qn, alterTab, "WJ"]
@@ -134,7 +134,7 @@ submit path fn qn wd = do
 debug :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
 debug path src din wd = do
  debugin <- (\x -> if x then din else wd </> din) <$> doesFileExist din
- res <- sendServer path (evalSHelper (Types.Debug (Source (wd </> src)) (DIn debugin)))
+ res <- sendServer path (evalSHelper (Types.Debug (Source (wd, src)) (DIn debugin)))
  case res of
   DAC (DOut dout) -> TIO.putStrLn dout
   DCE (Message message) -> TIO.putStrLn message
@@ -170,18 +170,18 @@ log path = do
       -> V.foldl1 T.append  ["CGet ", (T.intercalate " ".V.toList.V.map (\(CName a) -> a)) req, " : Ok"]
     (SHelperServerRequest (CGetReq req (Userdir ud)), SHelperErr res)
       -> V.foldl1 T.append  ["CGet ", (T.intercalate " ".V.toList.V.map (\(CName a) -> a)) req, " : Err ", (fst.exceptionText) res]
-    (SHelperServerRequest (TestReq (Source src) (QName qn)), SHelperOk res)
-      -> V.foldl1 T.append ["Test ",T.pack src, " " , qn , " : Ok"]
-    (SHelperServerRequest (TestReq (Source src) (QName qn)), SHelperErr res) 
-      -> V.foldl1 T.append ["Test ",T.pack src, " " , qn , " : Err ", (fst.exceptionText) res]
-    (SHelperServerRequest (SubmitReq (Source src) (QName qn)), SHelperOk res)
-      -> V.foldl1 T.append ["Submit ",T.pack src, " ", qn, " : Ok"]
-    (SHelperServerRequest (SubmitReq (Source src) (QName qn)), SHelperErr res) 
-      -> V.foldl1 T.append ["Submit ",T.pack src, " ", qn, " : Err ", (fst.exceptionText) res]
-    (SHelperServerRequest (DebugReq (Source src) (DIn din)), SHelperOk res)
-      -> V.foldl1 T.append ["Debug ", T.pack src, " ", T.pack din, " : Ok"]
-    (SHelperServerRequest (DebugReq (Source src) (DIn din)), SHelperErr res)
-      -> V.foldl1 T.append ["Debug ", T.pack src, " ", T.pack din, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (TestReq (Source (wd, src)) (QName qn)), SHelperOk res)
+      -> V.foldl1 T.append ["Test ",T.pack (wd </> src), " " , qn , " : Ok"]
+    (SHelperServerRequest (TestReq (Source (wd, src)) (QName qn)), SHelperErr res) 
+      -> V.foldl1 T.append ["Test ",T.pack (wd </> src), " " , qn , " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (SubmitReq (Source (wd, src)) (QName qn)), SHelperOk res)
+      -> V.foldl1 T.append ["Submit ",T.pack (wd </>  src), " ", qn, " : Ok"]
+    (SHelperServerRequest (SubmitReq (Source (wd, src)) (QName qn)), SHelperErr res) 
+      -> V.foldl1 T.append ["Submit ",T.pack (wd </> src), " ", qn, " : Err ", (fst.exceptionText) res]
+    (SHelperServerRequest (DebugReq (Source (wd, src)) (DIn din)), SHelperOk res)
+      -> V.foldl1 T.append ["Debug ", T.pack (wd </> src), " ", T.pack din, " : Ok"]
+    (SHelperServerRequest (DebugReq (Source (wd, src)) (DIn din)), SHelperErr res)
+      -> V.foldl1 T.append ["Debug ", T.pack (wd </> src), " ", T.pack din, " : Err ", (fst.exceptionText) res]
     (SHelperServerRequest PrintReq, SHelperOk res) -> "Print : Ok"
     (SHelperServerRequest PrintReq, SHelperErr res) -> T.append "Print : Err " $ (fst.exceptionText) res
     (SHelperServerRequest (ShowReq (QName qn)), SHelperOk res)

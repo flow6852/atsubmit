@@ -2,18 +2,24 @@
 	"language": [ 
 		{
 			"name": "haskell",
-			"extention": ["hs"],
+			"extension": ["hs"],
+            "need_files": [],
 			"is_docker": true,
 			"docker_image": "atsubmit_hs",
-			"compile": "stack ghc -o ./a.out -O2 ./Main.hs",
+            "docker_comp": "ghc -o /home/a.out -O2 /home/Main.hs",
+            "docker_exec": "./a.out",
+			"compile": "stack ghc -o /home/a.out -O2 /home/Main.hs",
 			"exec": "./a.out",
 			"langid": "4027" 
 		},
 		{
 			"name": "rust",
-			"extention": ["rs"],
+			"extension": ["rs"],
+            "need_files": ["Cargo.toml"],
 			"is_docker": true,
 			"docker_image": "atsubmit_rs",
+            "docker_comp": "cp /home/Main.rs /home/atsubmit_rs/src/main.rs && cargo build --quiet --release --offline --manifest-path=/home/atsubmit_rs/Cargo.toml && cp /home/atsubmit_rs/target/release/atsubmit_rs a.out",
+            "docker_exec": "./a.out",
 			"compile": "rustc -O -o ./a.out ./Main.rs",
 			"exec": "./a.out",
 			"langid": "4050"

@@ -20,7 +20,7 @@ newtype Username = Username T.Text deriving (Show, Eq)
 newtype Password = Password T.Text deriving (Show, Eq)
 newtype QName = QName T.Text deriving (Show, Eq)
 newtype CName = CName T.Text deriving (Show, Eq)
-newtype Source = Source FilePath deriving (Show, Eq)
+newtype Source = Source (FilePath, FilePath) deriving (Show, Eq) {- wd, src -}
 newtype Userdir = Userdir FilePath deriving (Show, Eq)
 newtype QUrl = QUrl T.Text deriving (Show, Eq)
 newtype QIO = QIO (V.Vector (T.Text, T.Text)) deriving (Show, Eq)
@@ -54,7 +54,6 @@ data Contest = Contest { questions :: V.Vector Question
                        , csrf_token :: T.Text
                        , rlogs :: V.Vector RLog
                        , homedir :: FilePath
-                       , main_file :: FilePath
                        , input_file :: FilePath
                        , compile_file :: FilePath
                        , output_file :: FilePath
@@ -153,9 +152,11 @@ data DebugBodyRes
         deriving (Show, Eq)
 
 data LangJson = LangJson { name :: T.Text
-                         , extention :: V.Vector T.Text
+                         , extension :: V.Vector T.Text
                          , is_docker :: Bool
                          , docker_image :: Maybe T.Text
+                         , docker_comp :: Maybe T.Text
+                         , docker_exec :: Maybe T.Text
                          , compile :: Maybe T.Text
                          , exec :: Maybe T.Text
                          , langid :: T.Text

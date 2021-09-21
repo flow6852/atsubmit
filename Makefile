@@ -26,25 +26,26 @@ install:
 	@if [ ! -d $(LOCAL_CONF_PATH) ]; then mkdir -p $(LOCAL_CONF_PATH) ; fi
 	@if [ ! -d $(LOCAL_LIB_PATH) ]; then mkdir -p $(LOCAL_LIB_PATH) ; fi
 	@if [ ! -d $(LOCAL_MAN_PATH) ]; then mkdir -p $(LOCAL_MAN_PATH) ; fi
-	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-exe) $(LOCAL_BIN_PATH)/$(BIN_NAME)
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-cilent) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
 	@if [ $(shell docker image ls atjudge_rs | wc -l) -eq 1 ]; then docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
 	@cp doc/help.man $(LOCAL_MAN_PATH)/$(BIN_NAME).man
-	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
 	@echo "installed"
 
 update-all:
 	@$(STACK_BIN) build
+	@if [ $(shell docker image ls atjudge_hs | wc -l) -eq 1 ]; then docker build docker/hs_container -t atsubmit_hs --memory 1024m ; fi
+	@if [ $(shell docker image ls atjudge_rs | wc -l) -eq 1 ]; then docker build docker/rs_container -t atsubmit_rs --memory 1024m ; fi
 	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
 	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)
-	@cp docker/docker_judge.sh $(LOCAL_LIB_PATH)
 
 update-app:
-	@$(STACK_BIN) build
-	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
-	@sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
+	$(STACK_BIN) build
+	sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-server) $(LOCAL_BIN_PATH)/$(BIN_NAME)-server
+	sudo install $(shell $(STACK_BIN) exec -- which $(BIN_NAME)-client) $(LOCAL_BIN_PATH)/$(BIN_NAME)-client
 
 update-json:
 	@cp sample/lang_conf.json $(LOCAL_CONF_PATH)

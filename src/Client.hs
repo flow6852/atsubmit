@@ -152,7 +152,7 @@ testRsvloop sock size = do
  case DA.decode raw of
   Just AC -> TIO.putStrLn "AC" >> testRsvloop sock size
   Just (WA out ans) -> waPrint out ans >> testRsvloop sock size
-  Just (CE (Message msg)) -> TIO.putStrLn msg >> testRsvloop sock size
+  Just (CE (Message msg)) -> TIO.putStrLn "CE" >> TIO.putStrLn msg >> testRsvloop sock size
   Just RE -> TIO.putStrLn "RE" >> testRsvloop sock size
   Just TLE -> TIO.putStrLn "TLE" >> testRsvloop sock size
   Just IE  -> TIO.putStrLn "IE" >> throwIO InternalError
