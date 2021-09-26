@@ -231,8 +231,8 @@ evalSHelper mvcont (Test sock (Source (wd, src)) (QName qn)) = do
 
 evalSHelper mvcont (Submit (Source (wd, source)) (QName qn)) = do
  contest <- readMVar mvcont
- src <- TIO.readFile source
- lang <- languageSelect (homedir contest) source
+ src <- TIO.readFile (wd </> source)
+ lang <- languageSelect (homedir contest) (wd </> source)
  let cn = T.takeWhile (/='_') qn
      questurl = V.foldl1 T.append ["https://atcoder.jp/contests/", cn, "/submit"]
  res <- postRequestWrapper questurl (homedir contest) [ ("data.TaskScreenName", qn), ("data.LanguageId", langid lang), ("sourceCode", src), ("csrf_token", csrf_token contest)]
