@@ -21,4 +21,4 @@ RUN pacman -Sy --noconfirm;\
 # docker workdir
 WORKDIR /
 # docker cmd
-# CMD ["sh","/home/judge.sh"]
+CMD ["sh","/home/judge.sh"]

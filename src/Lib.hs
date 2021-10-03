@@ -96,15 +96,14 @@ sendMsg sock msg n = do
  NSBS.send sock $ toStrict.DA.encode $ Sizes {socksize = n, datasize = S.length msg}
  raw <- timeout 1000 (NSBS.recv sock n) -- deside send size
  case raw of Just json -> case (DA.decode.fromStrict) json of Just size -> sendLoop (takeNList (socksize size) msg)
-                                                              _         -> return BS.empty
+                                                              _         -> throwIO (Unknown "socksize Nothing")
              Nothing   -> sendMsg sock msg n -- resend timeout
  `catch` (\(SomeException e) -> throwIO e)
  where
   sendLoop :: [S.ByteString] -> IO BS.ByteString
-  sendLoop m = do 
-   NSBS.send sock $ Prelude.head m
-   if Prelude.length m == 1 then NSBS.recv sock n
-   else sendLoop (Prelude.tail m)
+  sendLoop [] = throwIO (Unknown "Nothing Data")
+  sendLoop [m] = NSBS.send sock m >> NSBS.recv sock n
+  sendLoop (x:xs) = NSBS.send sock x >> sendLoop xs
 
 rmDup :: V.Vector T.Text -> V.Vector T.Text
 rmDup = V.foldl (\seen x -> if V.elem x seen then seen else V.cons x seen) V.empty
@@ -153,18 +152,26 @@ checkResult ([]:es) ans   = checkResult es ans
 checkResult (r:es) (a:ns)   = r == a && checkResult es ns
 checkResult _ _             = False
 
+preRunContainer :: Source -> LangJson -> IO ()
+preRunContainer (Source (wd, src)) lj = case docker_image lj of
+ Just dimage -> do
+  dexist <- shell (V.foldl1 T.append ["docker ps | grep atsubmit_run"]) Turtle.empty
+  case dexist of
+   ExitSuccess -> print "docker container exists."
+   _ -> void (shell (V.foldl1 T.append ["docker run --name atsubmit_run --pids-limit 100 --network none -dit ", dimage, " sh; docker exec atsubmit_run /home/judge.sh"]) Turtle.empty)
+ Nothing -> throwIO InternalError
+
 compileWithContainer :: Contest -> Source -> LangJson -> IO T.Text
-compileWithContainer contest (Source (wd, src)) lj = case (docker_image lj, docker_comp lj) of
- (Just dimage, Just compcmd) -> do 
-  shell (V.foldl1 T.append ["docker run --name atsubmit_run --pids-limit 100 --network none  -dit ", dimage, " sh"]) Turtle.empty
+compileWithContainer contest (Source (wd, src)) lj = case docker_comp lj of
+ Just compcmd -> do
+  preRunContainer (Source (wd, src)) lj 
   shell (V.foldl1 T.append ["docker cp ", T.pack (wd System.FilePath.</> src), " atsubmit_run:/home/Main", (T.pack.takeExtension) src]) Turtle.empty
   ec <- shell (V.foldl1 T.append ["docker exec atsubmit_run bash -c \"", compcmd, " > /home/comp.txt 2>&1\""]) Turtle.empty
   shell (V.foldl1 T.append ["docker cp atsubmit_run:/home/comp.txt ", (T.pack.compile_file) contest]) Turtle.empty
   case ec of
    ExitSuccess -> return ""
    _           -> rdFile $ compile_file contest
- (Nothing, Just _) -> throwIO InternalError
- (_, Nothing) -> throwIO InternalError
+ Nothing -> throwIO InternalError 
  where 
   rdFile :: System.FilePath.FilePath -> IO T.Text
   rdFile path = doesFileExist path >>= \x -> if x then TIO.readFile path else return $ V.foldl1 T.append ["File ", T.pack path, " Not Exists"]

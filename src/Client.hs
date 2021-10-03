@@ -130,6 +130,14 @@ evalSHelper (LangId lang) sock = do
   Just (SHelperErr e) -> throwIO e 
   _ -> throwIO (Unknown "decode error")
 
+evalSHelper (ConRun src) sock = do 
+ sendMsg sock ((toStrict.DA.encode) (ConRunReq src)) 1024
+ raw <- fromStrict <$> recvMsg sock 1024
+ case DA.decode raw of
+  Just (SHelperOk (ConRunRes unit)) -> return unit
+  Just (SHelperErr e) -> throwIO e 
+  _ -> throwIO (Unknown "decode error")
+
 evalSHelper Stop sock = do
   sendMsg sock ((toStrict.DA.encode) StopReq) 1024
   raw <- fromStrict <$> recvMsg sock 1024

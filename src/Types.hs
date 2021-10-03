@@ -78,6 +78,7 @@ data SHelper a where
         Result :: CName -> Maybe Sid -> SHelper CResult -- コンテストを受け取ってコンテストの結果を出力する.
         Log    :: SHelper (V.Vector RLog) -- ログの出力
         LangId :: Lang -> SHelper (V.Vector LanguageId) -- data.LanguageIdの表示
+        ConRun :: Source -> SHelper ()
         Stop   :: SHelper ()
         Logout :: SHelper ()
 
@@ -94,6 +95,7 @@ data SHelperRequest
         | ResultReq CName (Maybe Sid)
         | LogReq 
         | LangIdReq Lang
+        | ConRunReq Source
         | StopReq
         | LogoutReq
         deriving(Show, Eq)
@@ -111,6 +113,7 @@ data SHelperResponse
         | ResultRes CResult
         | LogRes (V.Vector RLog)
         | LangIdRes (V.Vector LanguageId)
+        | ConRunRes ()
         | StopRes ()
         | LogoutRes ()
         deriving (Show, Eq)

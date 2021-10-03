@@ -29,6 +29,7 @@ import Control.Applicative
 import Control.Exception
 import qualified Control.Foldl as CF
 import qualified Control.Exception as E
+import Control.Concurrent
 import Control.Concurrent.MVar
 import Control.Monad.IO.Class
 import System.Directory
@@ -123,6 +124,9 @@ actionSHelper contest sock (SHelperServerRequest request) = do
         LangIdReq lang -> do
                 result <- evalSHelper contest (LangId lang)
                 return $ SHelperOk (LangIdRes result)
+        ConRunReq source -> do
+                result <- evalSHelper contest (ConRun source)
+                return $ SHelperOk (ConRunRes result)
         StopReq -> do
                 result <- evalSHelper contest Stop
                 return $ SHelperOk (StopRes result)
@@ -157,6 +161,8 @@ requestCheck (ResultReq (CName "") _) = return $ Err "don't set contest name."
 requestCheck (ResultReq cname _) = return Ok
 requestCheck LogReq = return Ok
 requestCheck (LangIdReq _) = return Ok
+requestCheck (ConRunReq (Source (wd, ""))) = return $ Err "don't set source file."
+requestCheck (ConRunReq (Source (wd, src))) = doesFileExist (wd </> src) >>= \x -> return $ if x then Ok else Err (fileNotExists (wd </> src))
 requestCheck StopReq = return Ok
 requestCheck LogoutReq = return Ok
 
@@ -208,8 +214,8 @@ evalSHelper mvcont (Test sock (Source (wd, src)) (QName qn)) = do
  compStatus <- compcmd contest (Source (wd, src)) lang
  case (mquest, compStatus) of 
   (Nothing, _) -> throwIO $ NotGetQuestion (QName qn) -- not getting
-  (Just a, "") -> E.finally (testLoop contest (qiosample a) execmd lang) stopcmd
-  (Just a, msg) -> E.finally (void (sendMsg sock ((toStrict.DA.encode) (CE (Message msg))) 1024)) stopcmd
+  (Just a, "") -> testLoop contest (qiosample a) execmd lang
+  (Just a, msg) -> void (sendMsg sock ((toStrict.DA.encode) (CE (Message msg))) 1024)
  where
   testLoop :: Contest -> V.Vector (T.Text, T.Text) -> (Contest -> Source -> LangJson -> IO (Maybe Int)) -> LangJson ->  IO ()
   testLoop c qs func lang = if V.null qs then return () else do
@@ -251,13 +257,11 @@ evalSHelper mvcont (Types.Debug (Source (wd, src)) (DIn din)) = do
    ec <- execmd contest (Source (wd, src)) lang
    outres <- TIO.readFile (output_file contest)
    dinp <- TIO.readFile (input_file contest)
-   stopcmd
    return $ case ec of Just 0  -> DAC (DOut outres)
                        Just 2  -> DRE
                        Just _  -> DTLE
                        Nothing -> DIE
   msg -> do 
-   stopcmd 
    return $ DCE (Message msg)
 
 evalSHelper mvcont Print = do
@@ -285,9 +289,15 @@ evalSHelper mvcont (Result (CName cn) (Just (Sid sid))) = do
  let results = escapeGT.escapeLT.decodeUtf8.BSL.toStrict.getResponseBody $ res
  return $ CResult [[results]]
 
+evalSHelper mvcont (ConRun (Source (wd, src))) = do
+ contest <- readMVar mvcont
+ lang <- languageSelect (homedir contest) src
+ forkIO $ preRunContainer (Source (wd, src)) lang
+ return ()
 
 evalSHelper mvcont Stop = do
  contest <- readMVar mvcont
+ stopContainer
  return ()
 
 evalSHelper mvcont Log = do

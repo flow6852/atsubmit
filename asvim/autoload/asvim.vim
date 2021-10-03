@@ -33,8 +33,9 @@ endfunction
 
 function! asvim#AtStart(...)
     let cmd = "atsubmit-server --daemonize"
-    call job_start(cmd)
+    call system(cmd)
     call s:exec_cmd_term("echo atsubmit start")
+    call asvim#AtConRun()
 endfunction
 
 function! asvim#AtQGet(...) "AtQGet question
@@ -160,6 +161,12 @@ endfunction
 function! asvim#AtLog(...) " AtLog
 	let cmd = "atsubmit-client log"
     call s:exec_cmd_term(cmd)
+endfunction
+
+function! asvim#AtConRun(...)
+    let cmd = "atsubmit-client conrun " . expand("%")
+    call job_start(cmd)
+    call s:exec_cmd_term("echo atsubmit container start")
 endfunction
 
 function! asvim#AtStop(...) " AtStop

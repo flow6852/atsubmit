@@ -1,7 +1,7 @@
 #!/bin/env sh
 
-workdir=/home/atsubmit_rs
-
+cd /home/atsubmit_rs
+cargo build --release --offline
 # cp ${workdir}/Main.txt ${workdir}/src/main.rs
 # cargo build --release --offline 2>${workdir}/../comp.txt 1>/dev/null
 # if test $? -ne 0  ; then

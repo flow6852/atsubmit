@@ -43,6 +43,7 @@ main = do
   ["log"] -> Main.log path `catch` \(e :: SHelperException) -> exceptionExit e
   ["langid"] -> Main.langid path T.empty `catch` \(e :: SHelperException) -> exceptionExit e
   ["langid", lang] -> Main.langid path lang `catch` \(e :: SHelperException) -> exceptionExit e
+  ["conrun", src] -> Main.conrun path (T.unpack src) wd `catch` \(e :: SHelperException) -> exceptionExit e
   ["stop"] -> stop path `catch` \(e :: SHelperException) -> exceptionExit e
   ["logout"] -> logout path `catch` \(e :: SHelperException) -> exceptionExit e
   _ -> exceptionExit (BadData "command error")
@@ -201,6 +202,12 @@ langid path lang = do
  langids <- sendServer path (evalSHelper (LangId (Lang lang)))
  TIO.putStrLn "Language, Id"
  mapM_ (TIO.putStrLn.(\(LanguageId (Id a, Lang b)) -> V.foldl1 T.append [b, ", ", a])) langids
+
+conrun :: FilePath -> FilePath -> FilePath -> IO()
+conrun path src wd = do
+ result <- sendServer path (evalSHelper (ConRun (Source (wd, src))))
+ return ()
+ 
 
 stop :: FilePath -> IO ()
 stop path = do
