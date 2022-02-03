@@ -42,7 +42,7 @@ import qualified Network.URI.Encode as NUE
 
 runServer :: FilePath -> (Socket -> IO Bool) -> IO ()
 runServer path server = do
- result <- withSocketsDo $ E.bracket (open path) close doSocket
+ result <- withSocketsDo $ E.bracket (open path) (\s -> close s >> return True) doSocket
  when result $ runServer path server
  where
   doSocket :: Socket -> IO Bool
